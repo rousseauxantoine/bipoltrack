@@ -1,0 +1,21 @@
+{
+  "name": "Suivi Équilibre",
+  "short_name": "Suivi",
+  "description": "Suivi local d'efficacité de traitement",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#007aff",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192/007AFF/FFFFFF?text=Suivi",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512/007AFF/FFFFFF?text=Suivi",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

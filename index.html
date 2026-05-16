@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Suivi Traitement</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://via.placeholder.com/192/007AFF/FFFFFF?text=Suivi">
+    
+    <style>
+        :root {
+            --bg-color: #f2f2f7;
+            --card-bg: #ffffff;
+            --text-color: #000000;
+            --primary: #007aff;
+            --border-color: #c6c6c8;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1c1c1e;
+                --card-bg: #2c2c2e;
+                --text-color: #ffffff;
+                --border-color: #3a3a3c;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom) 16px;
+        }
+        header {
+            padding: 20px 0;
+            text-align: center;
+        }
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        h2 { margin-top: 0; font-size: 1.2rem; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 6px; font-size: 0.9rem; opacity: 0.8; }
+        select, textarea, input, button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-color);
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        button.secondary {
+            background: #5856d6;
+        }
+        .mood-range {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            margin-top: 4px;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #8e8e931a;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Mon Suivi</h1>
+    </header>
+
+    <!-- Saisie Quotidienne -->
+    <div class="card">
+        <h2>Saisie du jour</h2>
+        <form id="logForm">
+            <div class="form-group">
+                <label for="mood">Humeur générale (1: Très Bas / Depressif -> 10: Très Haut / Maniaque)</label>
+                <input type="range" id="mood" min="1" max="10" value="5" oninput="this.nextElementSibling.value = this.value">
+                <output style="display:block; text-align:center; font-weight:bold; margin-top:5px;">5</output>
+                <div class="mood-range">
+                    <span>1 (Dépression)</span>
+                    <span>5 (Stable)</span>
+                    <span>10 (Manie)</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label style="display:inline-flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="treatmentTaken" style="width:auto;"> Traitement pris correctement
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Notes (Sommeil, symptômes, événements clés...)</label>
+                <textarea id="notes" rows="3" placeholder="RAS, sommeil de 7h, légère anxiété le matin..."></textarea>
+            </div>
+
+            <button type="submit">Enregistrer la journée</button>
+        </form>
+    </div>
+
+    <!-- Section Rapport Médical -->
+    <div class="card">
+        <h2>Rapport pour le Médecin</h2>
+        <p style="font-size:0.85rem; opacity:0.8;">Génère un résumé textuel des 30 derniers jours copiable d'un clic pour votre psychiatre ou médecin traitant.</p>
+        <button class="secondary" onclick="generateReport()">Générer le rapport</button>
+        <div id="reportContainer" style="display:none; margin-top:15px;">
+            <button onclick="copyReport()">📋 Copier le rapport</button>
+            <pre id="reportText"></pre>
+        </div>
+    </div>
+
+    <script>
+        // Enregistrement du Service Worker pour le mode PWA Offline
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('SW enregistré !'))
+                    .catch(err => console.log('Erreur SW:', err));
+            });
+        }
+
+        // Gestion du stockage local
+        const storageKey = 'bipolarity_tracker_data';
+
+        document.getElementById('logForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const today = new Date().toISOString().split('T')[0];
+            const mood = parseInt(document.getElementById('mood').value);
+            const treatmentTaken = document.getElementById('treatmentTaken').checked;
+            const notes = document.getElementById('notes').value.trim();
+
+            let currentData = JSON.parse(localStorage.getItem(storageKey)) || {};
+            
+            // Écrase ou crée l'entrée pour aujourd'hui
+            currentData[today] = { mood, treatmentTaken, notes };
+            
+            localStorage.setItem(storageKey, JSON.stringify(currentData));
+            
+            alert('Données enregistrées localement !');
+            // Reset formulaire basique
+            document.getElementById('notes').value = '';
+            document.getElementById('treatmentTaken').checked = false;
+            document.getElementById('mood').value = 5;
+            document.getElementById('mood').nextElementSibling.value = 5;
+        });
+
+        function generateReport() {
+            const data = JSON.parse(localStorage.getItem(storageKey)) || {};
+            const sortedDates = Object.keys(data).sort().reverse(); // Plus récent en premier
+            
+            if (sortedDates.length === 0) {
+                alert("Aucune donnée enregistrée pour le moment.");
+                return;
+            }
+
+            let report = `RAPPORT DE SUIVI THÉRAPEUTIQUE\nGénéré le : ${new Date().toLocaleDateString('fr-FR')}\n`;
+            report += `-------------------------------------------\n\n`;
+
+            // Calcul de statistiques simples
+            let totalDays = sortedDates.length;
+            let treatmentCount = Object.values(data).filter(d => d.treatmentTaken).length;
+            let avgMood = (Object.values(data).reduce((acc, d) => acc + d.mood, 0) / totalDays).toFixed(1);
+
+            report += `Statistiques globales :\n`;
+            report += `- Jours suivis : ${totalDays}\n`;
+            report += `- Observance du traitement : ${treatmentCount}/${totalDays} jours (${Math.round((treatmentCount/totalDays)*100)}%)\n`;
+            report += `- Moyenne de l'humeur : ${avgMood}/10\n\n`;
+            report += `Historique détaillé des entrées :\n`;
+            report += `-------------------------------------------\n`;
+
+            sortedDates.forEach(date => {
+                const entry = data[date];
+                const formattedDate = new Date(date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+                report += `[${formattedDate}] Humeur: ${entry.mood}/10 | Traitement: ${entry.treatmentTaken ? 'OUI' : 'NON'}\n`;
+                if (entry.notes) {
+                    report += `  Notes: ${entry.notes}\n`;
+                }
+                report += `\n`;
+            });
+
+            document.getElementById('reportText').innerText = report;
+            document.getElementById('reportContainer').style.display = 'block';
+        }
+
+        function copyReport() {
+            const text = document.getElementById('reportText').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Le rapport a été copié dans le presse-papiers. Vous pouvez l\'envoyer par SMS, e-mail ou Note.');
+            }).catch(err => {
+                alert('Erreur lors de la copie automatique.');
+            });
+        }
+    </script>
+</body>
+</html>
