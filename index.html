@@ -512,6 +512,84 @@ canvas { width: 100% !important; }
   </div>
 </div>
 
+<!-- MODAL ÉDITION ENTRÉE -->
+<div class="modal-overlay" id="entry-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="entry-modal-title">Modifier l'entrée</div>
+    <input type="hidden" id="edit-entry-date">
+
+    <div class="field">
+      <label>Humeur</label>
+      <div class="mood-scale" id="edit-mood-scale">
+        <button class="mood-btn" data-v="1"><span class="score">1</span><span class="label">Dép.</span></button>
+        <button class="mood-btn" data-v="2"><span class="score">2</span></button>
+        <button class="mood-btn" data-v="3"><span class="score">3</span></button>
+        <button class="mood-btn" data-v="4"><span class="score">4</span></button>
+        <button class="mood-btn" data-v="5"><span class="score">5</span><span class="label">Neutre</span></button>
+        <button class="mood-btn" data-v="6"><span class="score">6</span></button>
+        <button class="mood-btn" data-v="7"><span class="score">7</span></button>
+        <button class="mood-btn" data-v="8"><span class="score">8</span></button>
+        <button class="mood-btn" data-v="9"><span class="score">9</span></button>
+        <button class="mood-btn" data-v="10"><span class="score">10</span><span class="label">Manie</span></button>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label>Sommeil (h)</label>
+        <input type="number" id="edit-sleep" min="0" max="12" step="0.5" style="text-align:center">
+      </div>
+      <div class="field">
+        <label>Anxiété (/10)</label>
+        <input type="number" id="edit-anxiety" min="0" max="10" step="1" style="text-align:center">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Traitements pris</label>
+      <div class="chips" id="edit-meds-chips"></div>
+    </div>
+
+    <div class="field">
+      <label>Symptômes</label>
+      <div class="chips" id="edit-symptoms-chips">
+        <button class="chip" data-v="agitation">Agitation</button>
+        <button class="chip" data-v="fatigue">Fatigue</button>
+        <button class="chip" data-v="irritabilite">Irritabilité</button>
+        <button class="chip" data-v="idees_rapides">Idées rapides</button>
+        <button class="chip" data-v="concentration">Difficulté à se concentrer</button>
+        <button class="chip" data-v="isolement">Retrait social</button>
+        <button class="chip" data-v="impulsivite">Impulsivité</button>
+        <button class="chip" data-v="pleurs">Pleurs</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Effets secondaires</label>
+      <div class="chips" id="edit-effects-chips">
+        <button class="chip" data-v="nausee">Nausée</button>
+        <button class="chip" data-v="tremblements">Tremblements</button>
+        <button class="chip" data-v="sedation">Sédation</button>
+        <button class="chip" data-v="prise_poids">Prise de poids</button>
+        <button class="chip" data-v="secheresse">Bouche sèche</button>
+        <button class="chip" data-v="insomnie">Insomnie</button>
+        <button class="chip" data-v="vision">Troubles vision</button>
+        <button class="chip" data-v="libido">Baisse libido</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Note libre</label>
+      <textarea id="edit-note" style="height:80px" placeholder="Observations…"></textarea>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveEditEntry()" style="margin-bottom:10px">Enregistrer les modifications</button>
+    <button class="btn btn-danger" onclick="deleteEntry()" style="margin-bottom:10px">Supprimer cette entrée</button>
+    <button class="btn btn-secondary" onclick="closeEntryModal()">Annuler</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -670,8 +748,119 @@ function renderHistory() {
       ${e.symptoms?.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">🔷 ${e.symptoms.join(', ')}</div>` : ''}
       ${e.effects?.length ? `<div style="font-size:12px;color:var(--warm);margin-top:4px">⚠ ${e.effects.join(', ')}</div>` : ''}
       ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+        <button onclick="openEntryModal('${e.date}')" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px;font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">✏️ Modifier</button>
+        <button onclick="confirmDeleteEntry('${e.date}')" style="flex:1;background:rgba(239,83,80,0.08);border:1px solid rgba(239,83,80,0.25);border-radius:10px;padding:8px;font-size:13px;font-weight:600;color:var(--danger);cursor:pointer;font-family:'DM Sans',sans-serif">🗑 Supprimer</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+// ── ENTRY MODAL ───────────────────────────────────────────────────
+let editMood = 0, editMeds = [], editSymptoms = [], editEffects = [];
+
+function openEntryModal(date) {
+  const e = entries.find(x => x.date === date);
+  if (!e) return;
+
+  editMood = e.mood;
+  editMeds = [...(e.meds || [])];
+  editSymptoms = [...(e.symptoms || [])];
+  editEffects = [...(e.effects || [])];
+
+  document.getElementById('edit-entry-date').value = date;
+  document.getElementById('entry-modal-title').textContent = 'Modifier · ' + fmt(date);
+  document.getElementById('edit-sleep').value = e.sleep;
+  document.getElementById('edit-anxiety').value = e.anxiety;
+  document.getElementById('edit-note').value = e.note || '';
+
+  // Mood buttons
+  document.querySelectorAll('#edit-mood-scale .mood-btn').forEach(btn => {
+    btn.classList.toggle('sel', +btn.dataset.v === editMood);
+    btn.onclick = () => {
+      editMood = +btn.dataset.v;
+      document.querySelectorAll('#edit-mood-scale .mood-btn').forEach(b => b.classList.remove('sel'));
+      btn.classList.add('sel');
+    };
+  });
+
+  // Meds chips
+  const wrap = document.getElementById('edit-meds-chips');
+  if (!meds.length) {
+    wrap.innerHTML = '<p style="font-size:13px;color:var(--muted)">Aucun traitement enregistré</p>';
+  } else {
+    wrap.innerHTML = '';
+    meds.filter(m => m.active !== false).forEach(m => {
+      const c = document.createElement('button');
+      c.className = 'chip' + (editMeds.includes(m.id) ? ' sel' : '');
+      c.textContent = m.name + (m.dose ? ' ' + m.dose : '');
+      c.onclick = () => {
+        c.classList.toggle('sel');
+        editMeds = editMeds.includes(m.id) ? editMeds.filter(x => x !== m.id) : [...editMeds, m.id];
+      };
+      wrap.appendChild(c);
+    });
+  }
+
+  // Symptom chips
+  document.querySelectorAll('#edit-symptoms-chips .chip').forEach(c => {
+    c.classList.toggle('sel', editSymptoms.includes(c.dataset.v));
+    c.onclick = () => {
+      c.classList.toggle('sel');
+      editSymptoms = editSymptoms.includes(c.dataset.v) ? editSymptoms.filter(x => x !== c.dataset.v) : [...editSymptoms, c.dataset.v];
+    };
+  });
+
+  // Effects chips
+  document.querySelectorAll('#edit-effects-chips .chip').forEach(c => {
+    c.classList.toggle('sel', editEffects.includes(c.dataset.v));
+    c.onclick = () => {
+      c.classList.toggle('sel');
+      editEffects = editEffects.includes(c.dataset.v) ? editEffects.filter(x => x !== c.dataset.v) : [...editEffects, c.dataset.v];
+    };
+  });
+
+  document.getElementById('entry-modal').classList.add('open');
+}
+
+function closeEntryModal() {
+  document.getElementById('entry-modal').classList.remove('open');
+}
+
+function saveEditEntry() {
+  if (!editMood) { toast('Sélectionnez une humeur', 'var(--danger)'); return; }
+  const date = document.getElementById('edit-entry-date').value;
+  const idx = entries.findIndex(e => e.date === date);
+  if (idx < 0) return;
+  entries[idx] = {
+    ...entries[idx],
+    mood: editMood,
+    sleep: +document.getElementById('edit-sleep').value,
+    anxiety: +document.getElementById('edit-anxiety').value,
+    meds: [...editMeds],
+    symptoms: [...editSymptoms],
+    effects: [...editEffects],
+    note: document.getElementById('edit-note').value.trim(),
+    ts: Date.now(),
+  };
+  DB.set('bt_entries', entries);
+  closeEntryModal();
+  renderHistory();
+  toast('Entrée modifiée ✓');
+}
+
+function confirmDeleteEntry(date) {
+  if (!confirm('Supprimer l\'entrée du ' + fmt(date) + ' ?')) return;
+  entries = entries.filter(e => e.date !== date);
+  DB.set('bt_entries', entries);
+  renderHistory();
+  toast('Entrée supprimée', 'var(--danger)');
+}
+
+function deleteEntry() {
+  const date = document.getElementById('edit-entry-date').value;
+  closeEntryModal();
+  setTimeout(() => confirmDeleteEntry(date), 200);
 }
 
 // ── TRAITEMENTS ───────────────────────────────────────────────────
@@ -987,6 +1176,9 @@ if ('serviceWorker' in navigator) {
 // Close modal on overlay click
 document.getElementById('med-modal').addEventListener('click', function(e) {
   if (e.target === this) closeMedModal();
+});
+document.getElementById('entry-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEntryModal();
 });
 </script>
 </body>
