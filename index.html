@@ -1,218 +1,973 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Suivi Traitement</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="https://via.placeholder.com/192/007AFF/FFFFFF?text=Suivi">
-    
-    <style>
-        :root {
-            --bg-color: #f2f2f7;
-            --card-bg: #ffffff;
-            --text-color: #000000;
-            --primary: #007aff;
-            --border-color: #c6c6c8;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-color: #1c1c1e;
-                --card-bg: #2c2c2e;
-                --text-color: #ffffff;
-                --border-color: #3a3a3c;
-            }
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom) 16px;
-        }
-        header {
-            padding: 20px 0;
-            text-align: center;
-        }
-        .card {
-            background: var(--card-bg);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        h2 { margin-top: 0; font-size: 1.2rem; }
-        .form-group { margin-bottom: 12px; }
-        label { display: block; margin-bottom: 6px; font-size: 0.9rem; opacity: 0.8; }
-        select, textarea, input, button {
-            width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            background: var(--card-bg);
-            color: var(--text-color);
-            font-size: 1rem;
-            box-sizing: border-box;
-        }
-        button {
-            background: var(--primary);
-            color: white;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 8px;
-        }
-        button.secondary {
-            background: #5856d6;
-        }
-        .mood-range {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8rem;
-            margin-top: 4px;
-        }
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #8e8e931a;
-            padding: 10px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 0.85rem;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BipolTrack">
+<meta name="theme-color" content="#0f1923">
+<title>BipolTrack</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg: #0f1923;
+  --bg2: #162030;
+  --bg3: #1e2d3d;
+  --card: #1a2840;
+  --border: rgba(79,195,247,0.12);
+  --accent: #4fc3f7;
+  --accent2: #81d4fa;
+  --warm: #ffb74d;
+  --danger: #ef5350;
+  --success: #66bb6a;
+  --muted: #90a4ae;
+  --text: #e8f0f7;
+  --text2: #b0bec5;
+  --radius: 16px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100svh;
+  overflow-x: hidden;
+  padding-bottom: calc(70px + var(--safe-bottom));
+}
+
+/* ── NAV ── */
+.nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(15,25,35,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding-bottom: var(--safe-bottom);
+}
+.nav-btn {
+  flex: 1; border: none; background: none; color: var(--muted);
+  padding: 10px 0 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-family: 'DM Sans', sans-serif; font-size: 10px; font-weight: 500;
+  cursor: pointer; transition: color 0.2s;
+}
+.nav-btn.active { color: var(--accent); }
+.nav-btn svg { width: 22px; height: 22px; }
+
+/* ── PAGES ── */
+.page { display: none; padding: calc(var(--safe-top) + 60px) 16px 16px; }
+.page.active { display: block; }
+
+/* ── HEADER ── */
+.page-header {
+  margin-bottom: 24px;
+}
+.page-header h1 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 28px; color: var(--text);
+  line-height: 1.1;
+}
+.page-header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+}
+
+/* ── MOOD SCALE ── */
+.mood-scale {
+  display: flex; gap: 6px; margin: 10px 0;
+}
+.mood-btn {
+  flex: 1; border: 1.5px solid var(--border);
+  background: var(--bg2); border-radius: 10px;
+  padding: 10px 4px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+}
+.mood-btn .score { font-size: 16px; font-weight: 700; color: var(--text2); }
+.mood-btn .label { font-size: 8px; color: var(--muted); }
+.mood-btn:hover, .mood-btn.sel { border-color: var(--accent); background: rgba(79,195,247,0.08); }
+.mood-btn.sel .score { color: var(--accent); }
+
+/* ── INPUTS ── */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.field input, .field select, .field textarea {
+  width: 100%; background: var(--bg2);
+  border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 11px 14px;
+  color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px;
+  outline: none; -webkit-appearance: none;
+}
+.field textarea { height: 90px; resize: none; line-height: 1.5; }
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: rgba(79,195,247,0.5);
+}
+.field select option { background: var(--bg2); }
+
+/* ── RANGE SLIDER ── */
+.slider-wrap { padding: 4px 0; }
+input[type=range] {
+  -webkit-appearance: none; width: 100%; height: 6px;
+  border-radius: 3px; background: var(--bg3); outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--accent); cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(79,195,247,0.15);
+}
+.slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── TOGGLE CHIPS ── */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1.5px solid var(--border); background: var(--bg2);
+  border-radius: 20px; padding: 6px 14px;
+  font-size: 13px; cursor: pointer; color: var(--text2);
+  transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+}
+.chip.sel { border-color: var(--accent); background: rgba(79,195,247,0.1); color: var(--accent); }
+
+/* ── BUTTONS ── */
+.btn {
+  width: 100%; border: none; border-radius: 12px;
+  padding: 14px; font-family: 'DM Sans', sans-serif;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:active { transform: scale(0.98); background: var(--accent2); }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-danger { background: rgba(239,83,80,0.15); color: var(--danger); border: 1px solid rgba(239,83,80,0.3); }
+
+/* ── ENTRIES LIST ── */
+.entry-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+  cursor: pointer;
+}
+.entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.entry-date { font-size: 12px; color: var(--muted); }
+.mood-badge {
+  font-size: 12px; font-weight: 700; padding: 3px 10px;
+  border-radius: 20px; border: 1.5px solid;
+}
+.entry-meds { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.med-tag {
+  font-size: 11px; padding: 2px 9px; border-radius: 12px;
+  background: rgba(79,195,247,0.1); color: var(--accent);
+  border: 1px solid rgba(79,195,247,0.2);
+}
+.entry-note { font-size: 13px; color: var(--text2); margin-top: 8px; line-height: 1.4; }
+
+/* ── TRAITEMENTS ── */
+.med-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.med-info h3 { font-size: 15px; font-weight: 600; }
+.med-info p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.med-badge { font-size: 11px; padding: 3px 9px; border-radius: 12px; background: rgba(255,183,77,0.15); color: var(--warm); border: 1px solid rgba(255,183,77,0.3); }
+
+/* ── STATS ── */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.stat-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px; text-align: center;
+}
+.stat-val { font-family: 'DM Serif Display', serif; font-size: 32px; color: var(--accent); }
+.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── CHART ── */
+.chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.chart-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+canvas { width: 100% !important; }
+
+/* ── RAPPORT ── */
+.report-section { margin-bottom: 16px; }
+.report-preview {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  font-size: 13px; line-height: 1.7; color: var(--text2);
+  white-space: pre-wrap; max-height: 350px; overflow-y: auto;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; top: calc(var(--safe-top) + 12px); left: 50%; transform: translateX(-50%) translateY(-80px);
+  background: var(--success); color: #fff;
+  padding: 10px 22px; border-radius: 20px; font-size: 14px; font-weight: 600;
+  z-index: 999; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── MODAL ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  align-items: flex-end; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg2); border-top: 1px solid var(--border);
+  border-radius: 24px 24px 0 0; padding: 24px 20px calc(24px + var(--safe-bottom));
+  width: 100%; max-height: 80svh; overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
+.modal-title { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 16px; }
+
+/* ── EMPTY STATE ── */
+.empty {
+  text-align: center; padding: 48px 20px; color: var(--muted);
+}
+.empty svg { width: 48px; height: 48px; opacity: 0.3; margin-bottom: 12px; }
+.empty p { font-size: 14px; }
+
+/* ── SECTION DIVIDER ── */
+.section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); margin: 20px 0 10px; padding: 0 2px;
+}
+
+/* ── MOOD COLORS ── */
+.mood-1 { color: #ef5350; border-color: rgba(239,83,80,0.4); }
+.mood-2 { color: #ff7043; border-color: rgba(255,112,67,0.4); }
+.mood-3 { color: #ffa726; border-color: rgba(255,167,38,0.4); }
+.mood-4 { color: #ffee58; border-color: rgba(255,238,88,0.4); }
+.mood-5 { color: #d4e157; border-color: rgba(212,225,87,0.4); }
+.mood-6 { color: #9ccc65; border-color: rgba(156,204,101,0.4); }
+.mood-7 { color: #66bb6a; border-color: rgba(102,187,106,0.4); }
+.mood-8 { color: #4db6ac; border-color: rgba(77,182,172,0.4); }
+.mood-9 { color: #4fc3f7; border-color: rgba(79,195,247,0.4); }
+.mood-10 { color: #ab47bc; border-color: rgba(171,71,188,0.4); }
+
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
 </head>
 <body>
 
-    <header>
-        <h1>Mon Suivi</h1>
-    </header>
+<!-- PAGES -->
+<div id="page-journal" class="page active">
+  <div class="page-header">
+    <h1>Journal du jour</h1>
+    <p id="today-date"></p>
+  </div>
 
-    <!-- Saisie Quotidienne -->
-    <div class="card">
-        <h2>Saisie du jour</h2>
-        <form id="logForm">
-            <div class="form-group">
-                <label for="mood">Humeur générale (1: Très Bas / Depressif -> 10: Très Haut / Maniaque)</label>
-                <input type="range" id="mood" min="1" max="10" value="5" oninput="this.nextElementSibling.value = this.value">
-                <output style="display:block; text-align:center; font-weight:bold; margin-top:5px;">5</output>
-                <div class="mood-range">
-                    <span>1 (Dépression)</span>
-                    <span>5 (Stable)</span>
-                    <span>10 (Manie)</span>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label style="display:inline-flex; align-items:center; gap:10px;">
-                    <input type="checkbox" id="treatmentTaken" style="width:auto;"> Traitement pris correctement
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label for="notes">Notes (Sommeil, symptômes, événements clés...)</label>
-                <textarea id="notes" rows="3" placeholder="RAS, sommeil de 7h, légère anxiété le matin..."></textarea>
-            </div>
-
-            <button type="submit">Enregistrer la journée</button>
-        </form>
+  <div class="card">
+    <div class="card-label">Humeur générale</div>
+    <div class="mood-scale" id="mood-scale">
+      <button class="mood-btn" data-v="1"><span class="score">1</span><span class="label">Déprimé</span></button>
+      <button class="mood-btn" data-v="2"><span class="score">2</span></button>
+      <button class="mood-btn" data-v="3"><span class="score">3</span></button>
+      <button class="mood-btn" data-v="4"><span class="score">4</span></button>
+      <button class="mood-btn" data-v="5"><span class="score">5</span><span class="label">Neutre</span></button>
+      <button class="mood-btn" data-v="6"><span class="score">6</span></button>
+      <button class="mood-btn" data-v="7"><span class="score">7</span></button>
+      <button class="mood-btn" data-v="8"><span class="score">8</span></button>
+      <button class="mood-btn" data-v="9"><span class="score">9</span></button>
+      <button class="mood-btn" data-v="10"><span class="score">10</span><span class="label">Manie</span></button>
     </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:4px;">1–4 dépression · 5–6 stable · 7–10 hypomanie/manie</p>
+  </div>
 
-    <!-- Section Rapport Médical -->
-    <div class="card">
-        <h2>Rapport pour le Médecin</h2>
-        <p style="font-size:0.85rem; opacity:0.8;">Génère un résumé textuel des 30 derniers jours copiable d'un clic pour votre psychiatre ou médecin traitant.</p>
-        <button class="secondary" onclick="generateReport()">Générer le rapport</button>
-        <div id="reportContainer" style="display:none; margin-top:15px;">
-            <button onclick="copyReport()">📋 Copier le rapport</button>
-            <pre id="reportText"></pre>
-        </div>
+  <div class="card">
+    <div class="card-label">Traitements pris aujourd'hui</div>
+    <div class="chips" id="meds-chips">
+      <p style="font-size:13px;color:var(--muted);">Ajoutez d'abord vos traitements →</p>
     </div>
+  </div>
 
-    <script>
-        // Enregistrement du Service Worker pour le mode PWA Offline
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('SW enregistré !'))
-                    .catch(err => console.log('Erreur SW:', err));
-            });
-        }
+  <div class="card">
+    <div class="card-label">Sommeil (heures)</div>
+    <div class="slider-wrap">
+      <input type="range" id="sleep-slider" min="0" max="12" step="0.5" value="7">
+      <div class="slider-labels"><span>0h</span><span id="sleep-val">7h</span><span>12h</span></div>
+    </div>
+  </div>
 
-        // Gestion du stockage local
-        const storageKey = 'bipolarity_tracker_data';
+  <div class="card">
+    <div class="card-label">Anxiété</div>
+    <div class="slider-wrap">
+      <input type="range" id="anxiety-slider" min="0" max="10" step="1" value="0">
+      <div class="slider-labels"><span>Aucune</span><span id="anxiety-val">0/10</span><span>Intense</span></div>
+    </div>
+  </div>
 
-        document.getElementById('logForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const today = new Date().toISOString().split('T')[0];
-            const mood = parseInt(document.getElementById('mood').value);
-            const treatmentTaken = document.getElementById('treatmentTaken').checked;
-            const notes = document.getElementById('notes').value.trim();
+  <div class="card">
+    <div class="card-label">Symptômes notables</div>
+    <div class="chips" id="symptoms-chips">
+      <button class="chip" data-v="agitation">Agitation</button>
+      <button class="chip" data-v="fatigue">Fatigue</button>
+      <button class="chip" data-v="irritabilite">Irritabilité</button>
+      <button class="chip" data-v="idees_rapides">Idées rapides</button>
+      <button class="chip" data-v="concentration">Difficulté à se concentrer</button>
+      <button class="chip" data-v="isolement">Retrait social</button>
+      <button class="chip" data-v="impulsivite">Impulsivité</button>
+      <button class="chip" data-v="pleurs">Pleurs</button>
+    </div>
+  </div>
 
-            let currentData = JSON.parse(localStorage.getItem(storageKey)) || {};
-            
-            // Écrase ou crée l'entrée pour aujourd'hui
-            currentData[today] = { mood, treatmentTaken, notes };
-            
-            localStorage.setItem(storageKey, JSON.stringify(currentData));
-            
-            alert('Données enregistrées localement !');
-            // Reset formulaire basique
-            document.getElementById('notes').value = '';
-            document.getElementById('treatmentTaken').checked = false;
-            document.getElementById('mood').value = 5;
-            document.getElementById('mood').nextElementSibling.value = 5;
-        });
+  <div class="card">
+    <div class="card-label">Effets secondaires</div>
+    <div class="chips" id="effects-chips">
+      <button class="chip" data-v="nausee">Nausée</button>
+      <button class="chip" data-v="tremblements">Tremblements</button>
+      <button class="chip" data-v="sedation">Sédation</button>
+      <button class="chip" data-v="prise_poids">Prise de poids</button>
+      <button class="chip" data-v="secheresse">Bouche sèche</button>
+      <button class="chip" data-v="insomnie">Insomnie</button>
+      <button class="chip" data-v="vision">Troubles vision</button>
+      <button class="chip" data-v="libido">Baisse libido</button>
+    </div>
+  </div>
 
-        function generateReport() {
-            const data = JSON.parse(localStorage.getItem(storageKey)) || {};
-            const sortedDates = Object.keys(data).sort().reverse(); // Plus récent en premier
-            
-            if (sortedDates.length === 0) {
-                alert("Aucune donnée enregistrée pour le moment.");
-                return;
-            }
+  <div class="card">
+    <div class="card-label">Note libre</div>
+    <textarea id="note-input" placeholder="Événements du jour, observations, ressenti…"></textarea>
+  </div>
 
-            let report = `RAPPORT DE SUIVI THÉRAPEUTIQUE\nGénéré le : ${new Date().toLocaleDateString('fr-FR')}\n`;
-            report += `-------------------------------------------\n\n`;
+  <button class="btn btn-primary" onclick="saveEntry()">Enregistrer la journée</button>
+</div>
 
-            // Calcul de statistiques simples
-            let totalDays = sortedDates.length;
-            let treatmentCount = Object.values(data).filter(d => d.treatmentTaken).length;
-            let avgMood = (Object.values(data).reduce((acc, d) => acc + d.mood, 0) / totalDays).toFixed(1);
+<!-- HISTORIQUE -->
+<div id="page-history" class="page">
+  <div class="page-header">
+    <h1>Historique</h1>
+    <p id="history-count"></p>
+  </div>
+  <div id="entries-list"></div>
+</div>
 
-            report += `Statistiques globales :\n`;
-            report += `- Jours suivis : ${totalDays}\n`;
-            report += `- Observance du traitement : ${treatmentCount}/${totalDays} jours (${Math.round((treatmentCount/totalDays)*100)}%)\n`;
-            report += `- Moyenne de l'humeur : ${avgMood}/10\n\n`;
-            report += `Historique détaillé des entrées :\n`;
-            report += `-------------------------------------------\n`;
+<!-- TRAITEMENTS -->
+<div id="page-meds" class="page">
+  <div class="page-header">
+    <h1>Traitements</h1>
+    <p>Gérez vos médicaments</p>
+  </div>
+  <button class="btn btn-secondary" style="margin-bottom:16px" onclick="openMedModal()">
+    + Ajouter un traitement
+  </button>
+  <div id="meds-list"></div>
+</div>
 
-            sortedDates.forEach(date => {
-                const entry = data[date];
-                const formattedDate = new Date(date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
-                report += `[${formattedDate}] Humeur: ${entry.mood}/10 | Traitement: ${entry.treatmentTaken ? 'OUI' : 'NON'}\n`;
-                if (entry.notes) {
-                    report += `  Notes: ${entry.notes}\n`;
-                }
-                report += `\n`;
-            });
+<!-- STATISTIQUES -->
+<div id="page-stats" class="page">
+  <div class="page-header">
+    <h1>Statistiques</h1>
+    <p id="stats-period"></p>
+  </div>
+  <div class="stats-grid" id="stats-grid"></div>
+  <div class="chart-wrap">
+    <div class="chart-title">Évolution de l'humeur (30 derniers jours)</div>
+    <canvas id="mood-chart" height="160"></canvas>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title">Qualité du sommeil</div>
+    <canvas id="sleep-chart" height="120"></canvas>
+  </div>
+</div>
 
-            document.getElementById('reportText').innerText = report;
-            document.getElementById('reportContainer').style.display = 'block';
-        }
+<!-- RAPPORT -->
+<div id="page-report" class="page">
+  <div class="page-header">
+    <h1>Rapport médecin</h1>
+    <p>Générez un compte-rendu à partager</p>
+  </div>
+  <div class="card">
+    <div class="field">
+      <label>Nom du patient</label>
+      <input type="text" id="patient-name" placeholder="Prénom Nom">
+    </div>
+    <div class="field">
+      <label>Date de naissance</label>
+      <input type="date" id="patient-dob">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Période (début)</label>
+        <input type="date" id="report-from">
+      </div>
+      <div class="field">
+        <label>Période (fin)</label>
+        <input type="date" id="report-to">
+      </div>
+    </div>
+    <div class="field">
+      <label>Médecin destinataire</label>
+      <input type="text" id="doctor-name" placeholder="Dr. …">
+    </div>
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:12px" onclick="generateReport()">Générer le rapport</button>
+  <div id="report-output" style="display:none">
+    <div class="section-title">Aperçu</div>
+    <div class="report-preview" id="report-preview"></div>
+    <div style="height:12px"></div>
+    <button class="btn btn-secondary" onclick="copyReport()">Copier le texte</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-secondary" onclick="printReport()">Ouvrir pour impression / PDF</button>
+  </div>
+</div>
 
-        function copyReport() {
-            const text = document.getElementById('reportText').innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Le rapport a été copié dans le presse-papiers. Vous pouvez l\'envoyer par SMS, e-mail ou Note.');
-            }).catch(err => {
-                alert('Erreur lors de la copie automatique.');
-            });
-        }
-    </script>
+<!-- NAV -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="goPage('journal',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M11.586 8.414a2 2 0 1 1 2.828 2.828L8 17.414 4 19l1.586-4 6-6.586z"/></svg>
+    Journal
+  </button>
+  <button class="nav-btn" onclick="goPage('history',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+    Historique
+  </button>
+  <button class="nav-btn" onclick="goPage('meds',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6l1 4H8L9 3z"/><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M12 11v6M9 14h6"/></svg>
+    Traitements
+  </button>
+  <button class="nav-btn" onclick="goPage('stats',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Stats
+  </button>
+  <button class="nav-btn" onclick="goPage('report',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    Rapport
+  </button>
+</nav>
+
+<!-- MODAL TRAITEMENT -->
+<div class="modal-overlay" id="med-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nouveau traitement</div>
+    <div class="field">
+      <label>Nom du médicament</label>
+      <input type="text" id="med-name" placeholder="ex: Lithium, Dépakine, Abilify…">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Dosage</label>
+        <input type="text" id="med-dose" placeholder="500 mg">
+      </div>
+      <div class="field">
+        <label>Fréquence</label>
+        <select id="med-freq">
+          <option value="1x/jour">1x/jour</option>
+          <option value="2x/jour">2x/jour</option>
+          <option value="3x/jour">3x/jour</option>
+          <option value="au coucher">Au coucher</option>
+          <option value="matin">Matin</option>
+          <option value="matin+soir">Matin + soir</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Date de début</label>
+      <input type="date" id="med-start">
+    </div>
+    <div class="field">
+      <label>Notes (optionnel)</label>
+      <textarea id="med-notes" style="height:70px" placeholder="ex: à prendre avec de la nourriture…"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveMed()" style="margin-bottom:10px">Enregistrer</button>
+    <button class="btn btn-secondary" onclick="closeMedModal()">Annuler</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────
+const DB = {
+  get: (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } },
+  set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
+};
+
+let entries = DB.get('bt_entries', []);
+let meds    = DB.get('bt_meds', []);
+let selectedMood = 0;
+let selectedMeds = [];
+let selectedSymptoms = [];
+let selectedEffects = [];
+
+// ── UTILS ─────────────────────────────────────────────────────────
+const fmt = d => new Date(d).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' });
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const toast = (msg, color='var(--success)') => {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.background = color;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+};
+
+// ── NAVIGATION ────────────────────────────────────────────────────
+function goPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'history') renderHistory();
+  if (id === 'meds') renderMeds();
+  if (id === 'stats') renderStats();
+}
+
+// ── JOURNAL ───────────────────────────────────────────────────────
+document.getElementById('today-date').textContent = fmt(todayISO());
+
+// Mood buttons
+document.querySelectorAll('.mood-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    selectedMood = +btn.dataset.v;
+  });
+});
+
+// Sleep slider
+const sleepSlider = document.getElementById('sleep-slider');
+sleepSlider.addEventListener('input', () => {
+  document.getElementById('sleep-val').textContent = sleepSlider.value + 'h';
+});
+
+// Anxiety slider
+const anxSlider = document.getElementById('anxiety-slider');
+anxSlider.addEventListener('input', () => {
+  document.getElementById('anxiety-val').textContent = anxSlider.value + '/10';
+});
+
+// Symptom chips
+document.querySelectorAll('#symptoms-chips .chip').forEach(c => {
+  c.addEventListener('click', () => {
+    c.classList.toggle('sel');
+    const v = c.dataset.v;
+    selectedSymptoms = selectedSymptoms.includes(v)
+      ? selectedSymptoms.filter(x => x !== v)
+      : [...selectedSymptoms, v];
+  });
+});
+
+// Side effects chips
+document.querySelectorAll('#effects-chips .chip').forEach(c => {
+  c.addEventListener('click', () => {
+    c.classList.toggle('sel');
+    const v = c.dataset.v;
+    selectedEffects = selectedEffects.includes(v)
+      ? selectedEffects.filter(x => x !== v)
+      : [...selectedEffects, v];
+  });
+});
+
+function renderMedChips() {
+  const wrap = document.getElementById('meds-chips');
+  if (!meds.length) {
+    wrap.innerHTML = '<p style="font-size:13px;color:var(--muted)">Ajoutez d\'abord vos traitements →</p>';
+    return;
+  }
+  wrap.innerHTML = '';
+  meds.filter(m => m.active !== false).forEach(m => {
+    const c = document.createElement('button');
+    c.className = 'chip';
+    c.textContent = m.name + (m.dose ? ' ' + m.dose : '');
+    c.dataset.id = m.id;
+    c.addEventListener('click', () => {
+      c.classList.toggle('sel');
+      const id = m.id;
+      selectedMeds = selectedMeds.includes(id)
+        ? selectedMeds.filter(x => x !== id)
+        : [...selectedMeds, id];
+    });
+    wrap.appendChild(c);
+  });
+}
+
+function saveEntry() {
+  if (!selectedMood) { toast('Sélectionnez une humeur', 'var(--danger)'); return; }
+  const today = todayISO();
+  const existing = entries.findIndex(e => e.date === today);
+  const entry = {
+    date: today,
+    mood: selectedMood,
+    sleep: +sleepSlider.value,
+    anxiety: +anxSlider.value,
+    meds: [...selectedMeds],
+    symptoms: [...selectedSymptoms],
+    effects: [...selectedEffects],
+    note: document.getElementById('note-input').value.trim(),
+    ts: Date.now(),
+  };
+  if (existing >= 0) entries[existing] = entry;
+  else entries.push(entry);
+  DB.set('bt_entries', entries);
+  toast('Journée enregistrée ✓');
+  // reset mood
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel'));
+  selectedMood = 0;
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────
+function renderHistory() {
+  const list = document.getElementById('entries-list');
+  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  document.getElementById('history-count').textContent = sorted.length + ' entrée' + (sorted.length > 1 ? 's' : '');
+  if (!sorted.length) {
+    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg><p>Aucune entrée pour l'instant.<br>Commencez votre journal !</p></div>`;
+    return;
+  }
+  list.innerHTML = sorted.map(e => {
+    const medNames = e.meds.map(id => {
+      const m = meds.find(x => x.id === id);
+      return m ? `<span class="med-tag">${m.name}</span>` : '';
+    }).join('');
+    return `<div class="entry-card">
+      <div class="entry-header">
+        <span class="entry-date">${fmt(e.date)}</span>
+        <span class="mood-badge mood-${e.mood}">Humeur ${e.mood}/10</span>
+      </div>
+      <div style="display:flex;gap:16px;font-size:12px;color:var(--muted)">
+        <span>💤 ${e.sleep}h</span>
+        <span>⚡ Anxiété ${e.anxiety}/10</span>
+      </div>
+      ${medNames ? `<div class="entry-meds">${medNames}</div>` : ''}
+      ${e.symptoms?.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">🔷 ${e.symptoms.join(', ')}</div>` : ''}
+      ${e.effects?.length ? `<div style="font-size:12px;color:var(--warm);margin-top:4px">⚠ ${e.effects.join(', ')}</div>` : ''}
+      ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── TRAITEMENTS ───────────────────────────────────────────────────
+function openMedModal() {
+  document.getElementById('med-start').value = todayISO();
+  document.getElementById('med-modal').classList.add('open');
+}
+function closeMedModal() { document.getElementById('med-modal').classList.remove('open'); }
+
+function saveMed() {
+  const name = document.getElementById('med-name').value.trim();
+  if (!name) { toast('Entrez un nom', 'var(--danger)'); return; }
+  const med = {
+    id: Date.now().toString(),
+    name,
+    dose: document.getElementById('med-dose').value.trim(),
+    freq: document.getElementById('med-freq').value,
+    start: document.getElementById('med-start').value,
+    notes: document.getElementById('med-notes').value.trim(),
+    active: true,
+  };
+  meds.push(med);
+  DB.set('bt_meds', meds);
+  closeMedModal();
+  renderMeds();
+  renderMedChips();
+  toast('Traitement ajouté ✓');
+  document.getElementById('med-name').value = '';
+  document.getElementById('med-dose').value = '';
+  document.getElementById('med-notes').value = '';
+}
+
+function deleteMed(id) {
+  if (!confirm('Supprimer ce traitement ?')) return;
+  meds = meds.filter(m => m.id !== id);
+  DB.set('bt_meds', meds);
+  renderMeds();
+  renderMedChips();
+}
+
+function renderMeds() {
+  const list = document.getElementById('meds-list');
+  if (!meds.length) {
+    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M9 3h6l1 4H8L9 3z"/></svg><p>Aucun traitement enregistré.</p></div>`;
+    return;
+  }
+  list.innerHTML = meds.map(m => `
+    <div class="med-item">
+      <div class="med-info">
+        <h3>${m.name} ${m.dose ? '<span style="color:var(--muted);font-weight:400">'+m.dose+'</span>' : ''}</h3>
+        <p>${m.freq} · Depuis le ${fmt(m.start)}</p>
+        ${m.notes ? `<p style="margin-top:3px;font-size:11px;color:var(--muted)">${m.notes}</p>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <span class="med-badge">${m.freq}</span>
+        <button onclick="deleteMed('${m.id}')" style="font-size:12px;color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px">Supprimer</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── STATS ─────────────────────────────────────────────────────────
+function renderStats() {
+  const now = new Date();
+  const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
+  const recent = entries.filter(e => new Date(e.date) >= d30);
+  document.getElementById('stats-period').textContent = '30 derniers jours · ' + recent.length + ' entrées';
+
+  const avg = a => a.length ? (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1) : '—';
+  const moods = recent.map(e => e.mood);
+  const sleeps = recent.map(e => e.sleep);
+  const anxs = recent.map(e => e.anxiety);
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${avg(moods)}</div><div class="stat-lbl">Humeur moy.</div></div>
+    <div class="stat-card"><div class="stat-val">${avg(sleeps)}h</div><div class="stat-lbl">Sommeil moy.</div></div>
+    <div class="stat-card"><div class="stat-val">${avg(anxs)}</div><div class="stat-lbl">Anxiété moy.</div></div>
+    <div class="stat-card"><div class="stat-val">${recent.length}</div><div class="stat-lbl">Jours suivis</div></div>
+  `;
+
+  drawMoodChart(recent);
+  drawSleepChart(recent);
+}
+
+function drawMoodChart(data) {
+  const canvas = document.getElementById('mood-chart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth; const H = 160;
+  canvas.width = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length < 2) { ctx.fillStyle = '#546e7a'; ctx.font = '13px DM Sans'; ctx.fillText('Pas assez de données', 20, H/2); return; }
+
+  const pad = { t: 10, r: 10, b: 30, l: 28 };
+  const cW = W - pad.l - pad.r; const cH = H - pad.t - pad.b;
+
+  // grid lines
+  ctx.strokeStyle = 'rgba(79,195,247,0.07)'; ctx.lineWidth = 1;
+  [2,4,6,8,10].forEach(v => {
+    const y = pad.t + cH - (v/10)*cH;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cW, y); ctx.stroke();
+    ctx.fillStyle = '#546e7a'; ctx.font = '10px DM Sans'; ctx.textAlign = 'right';
+    ctx.fillText(v, pad.l - 4, y + 3);
+  });
+
+  // stable zone
+  ctx.fillStyle = 'rgba(102,187,106,0.06)';
+  const yTop = pad.t + cH - (6/10)*cH;
+  const yBot = pad.t + cH - (5/10)*cH;
+  ctx.fillRect(pad.l, yTop, cW, yBot - yTop);
+
+  // line
+  const xStep = cW / (sorted.length - 1);
+  const pts = sorted.map((e, i) => [pad.l + i * xStep, pad.t + cH - (e.mood/10)*cH]);
+
+  const grad = ctx.createLinearGradient(0, 0, cW, 0);
+  grad.addColorStop(0, '#ef5350'); grad.addColorStop(0.5, '#4fc3f7'); grad.addColorStop(1, '#ab47bc');
+  ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+  ctx.stroke();
+
+  // dots
+  pts.forEach(([x, y], i) => {
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI*2);
+    ctx.fillStyle = '#4fc3f7'; ctx.fill();
+  });
+}
+
+function drawSleepChart(data) {
+  const canvas = document.getElementById('sleep-chart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth; const H = 120;
+  canvas.width = W * window.devicePixelRatio;
+  canvas.height = H * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) return;
+
+  const pad = { t: 10, r: 10, b: 20, l: 28 };
+  const cW = W - pad.l - pad.r; const cH = H - pad.t - pad.b;
+  const barW = Math.max(2, cW / sorted.length - 3);
+
+  sorted.forEach((e, i) => {
+    const x = pad.l + i * (cW / sorted.length);
+    const barH = (e.sleep / 12) * cH;
+    const y = pad.t + cH - barH;
+    const color = e.sleep >= 7 && e.sleep <= 9 ? '#66bb6a' : e.sleep < 5 ? '#ef5350' : '#ffa726';
+    ctx.fillStyle = color + '99';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, barW, barH, 3);
+    else ctx.rect(x, y, barW, barH);
+    ctx.fill();
+  });
+
+  // 7h & 9h lines
+  ['#546e7a'].forEach(() => {
+    [7, 9].forEach(h => {
+      ctx.strokeStyle = 'rgba(102,187,106,0.3)'; ctx.setLineDash([3,3]); ctx.lineWidth = 1;
+      const y = pad.t + cH - (h/12)*cH;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cW, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#546e7a'; ctx.font = '9px DM Sans'; ctx.textAlign = 'right';
+      ctx.fillText(h+'h', pad.l - 3, y + 3);
+    });
+  });
+}
+
+// ── RAPPORT ───────────────────────────────────────────────────────
+function generateReport() {
+  const from = document.getElementById('report-from').value;
+  const to   = document.getElementById('report-to').value;
+  const name = document.getElementById('patient-name').value || 'Patient(e)';
+  const dob  = document.getElementById('patient-dob').value;
+  const doc  = document.getElementById('doctor-name').value || 'Médecin traitant';
+
+  const subset = entries.filter(e => {
+    if (from && e.date < from) return false;
+    if (to && e.date > to) return false;
+    return true;
+  }).sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!subset.length) { toast('Aucune donnée sur cette période', 'var(--danger)'); return; }
+
+  const avg = a => (a.reduce((s, x) => s + x, 0) / a.length).toFixed(1);
+  const moods = subset.map(e => e.mood);
+  const sleeps = subset.map(e => e.sleep);
+  const anxs = subset.map(e => e.anxiety);
+
+  const moodMin = Math.min(...moods); const moodMax = Math.max(...moods);
+  const depDays = subset.filter(e => e.mood <= 4).length;
+  const hypoDays = subset.filter(e => e.mood >= 7).length;
+  const stableDays = subset.length - depDays - hypoDays;
+
+  // Symptom frequency
+  const symCount = {};
+  subset.forEach(e => e.symptoms?.forEach(s => symCount[s] = (symCount[s]||0)+1));
+  const topSym = Object.entries(symCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const fxCount = {};
+  subset.forEach(e => e.effects?.forEach(s => fxCount[s] = (fxCount[s]||0)+1));
+  const topFx = Object.entries(fxCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Meds used
+  const medSet = new Set(subset.flatMap(e => e.meds));
+  const medList = [...medSet].map(id => {
+    const m = meds.find(x => x.id === id);
+    return m ? `${m.name} ${m.dose} (${m.freq}, depuis le ${fmt(m.start)})` : '';
+  }).filter(Boolean);
+
+  const period = `${fmt(from || subset[0].date)} au ${fmt(to || subset[subset.length-1].date)}`;
+
+  const report = `
+RAPPORT DE SUIVI BIPOLAIRE
+════════════════════════════════════════
+Date du rapport : ${fmt(todayISO())}
+À l'attention de : ${doc}
+
+PATIENT(E)
+──────────────────────────────────────
+Nom : ${name}
+Date de naissance : ${dob ? fmt(dob) : 'Non renseignée'}
+
+PÉRIODE COUVERTE
+──────────────────────────────────────
+${period}
+Nombre de jours renseignés : ${subset.length}
+
+TRAITEMENTS EN COURS
+──────────────────────────────────────
+${medList.length ? medList.join('\n') : 'Aucun traitement enregistré'}
+
+SYNTHÈSE DE L'HUMEUR
+──────────────────────────────────────
+Score moyen d'humeur  : ${avg(moods)} / 10
+  (1–4 = dépression · 5–6 = stabilité · 7–10 = hypomanie/manie)
+Score minimum         : ${moodMin} / 10
+Score maximum         : ${moodMax} / 10
+
+Répartition :
+  Jours dépressifs  (≤4) : ${depDays} jour(s) — ${Math.round(depDays/subset.length*100)} %
+  Jours stables   (5–6) : ${stableDays} jour(s) — ${Math.round(stableDays/subset.length*100)} %
+  Jours hypomanie/manie (≥7) : ${hypoDays} jour(s) — ${Math.round(hypoDays/subset.length*100)} %
+
+SOMMEIL
+──────────────────────────────────────
+Durée moyenne        : ${avg(sleeps)} h / nuit
+Nuits < 6h           : ${subset.filter(e=>e.sleep<6).length} nuit(s)
+Nuits > 9h           : ${subset.filter(e=>e.sleep>9).length} nuit(s)
+
+ANXIÉTÉ
+──────────────────────────────────────
+Score moyen          : ${avg(anxs)} / 10
+Jours anxiété ≥ 7   : ${subset.filter(e=>e.anxiety>=7).length} jour(s)
+
+SYMPTÔMES LES PLUS FRÉQUENTS
+──────────────────────────────────────
+${topSym.length ? topSym.map(([k,v]) => `  • ${k.replace('_',' ')} : ${v} jour(s)`).join('\n') : '  Aucun symptôme notable enregistré'}
+
+EFFETS SECONDAIRES RAPPORTÉS
+──────────────────────────────────────
+${topFx.length ? topFx.map(([k,v]) => `  • ${k.replace('_',' ')} : ${v} jour(s)`).join('\n') : '  Aucun effet secondaire rapporté'}
+
+NOTES SÉLECTIONNÉES
+──────────────────────────────────────
+${subset.filter(e=>e.note).slice(-5).map(e=>`[${fmt(e.date)}] ${e.note}`).join('\n\n') || '  Aucune note libre.'}
+
+──────────────────────────────────────
+Rapport généré automatiquement par BipolTrack
+Ce document est un outil d'aide à la communication et ne remplace pas un bilan clinique.
+`.trim();
+
+  document.getElementById('report-preview').textContent = report;
+  document.getElementById('report-output').style.display = 'block';
+  document.getElementById('report-output').scrollIntoView({ behavior: 'smooth' });
+  toast('Rapport généré ✓');
+}
+
+function copyReport() {
+  const text = document.getElementById('report-preview').textContent;
+  navigator.clipboard.writeText(text).then(() => toast('Copié dans le presse-papiers ✓'));
+}
+
+function printReport() {
+  const text = document.getElementById('report-preview').textContent;
+  const win = window.open('', '_blank');
+  win.document.write(`<pre style="font-family:monospace;font-size:13px;padding:30px;line-height:1.6">${text}</pre>`);
+  win.document.close();
+  win.print();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+renderMedChips();
+
+// Set default dates for report
+const now = new Date();
+const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
+document.getElementById('report-from').value = d30.toISOString().slice(0,10);
+document.getElementById('report-to').value   = now.toISOString().slice(0,10);
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// Close modal on overlay click
+document.getElementById('med-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeMedModal();
+});
+</script>
 </body>
 </html>

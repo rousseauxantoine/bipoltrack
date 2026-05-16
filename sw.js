@@ -1,23 +1,20 @@
-const CACHE_NAME = 'suivi-v1';
-const ASSETS = [
-  'index.html',
-  'manifest.json'
-];
+const CACHE_NAME = 'bipoltrack-v1';
+const ASSETS = ['./index.html', './manifest.json'];
 
-// Installation et mise en cache des fichiers statiques
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
-  );
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
+  self.skipWaiting();
 });
 
-// Stratégie réseau : Cache en premier, sinon réseau
-self.addEventListener('fetch', (e) => {
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
   e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
-  )
+    caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./index.html')))
+  );
 });
