@@ -482,6 +482,23 @@ canvas { width: 100% !important; }
         </select>
       </div>
     </div>
+    <div class="row2">
+      <div class="field">
+        <label>Quantité par prise</label>
+        <input type="number" id="med-qty" placeholder="ex : 1" min="0.25" step="0.25" style="text-align:center">
+      </div>
+      <div class="field">
+        <label>Unité</label>
+        <select id="med-qty-unit">
+          <option value="comprimé(s)">Comprimé(s)</option>
+          <option value="gélule(s)">Gélule(s)</option>
+          <option value="ml">ml</option>
+          <option value="goutte(s)">Goutte(s)</option>
+          <option value="sachet(s)">Sachet(s)</option>
+          <option value="patch(s)">Patch(s)</option>
+        </select>
+      </div>
+    </div>
     <div class="field">
       <label>Date de début</label>
       <input type="date" id="med-start">
@@ -672,6 +689,8 @@ function saveMed() {
     name,
     dose: document.getElementById('med-dose').value.trim(),
     freq: document.getElementById('med-freq').value,
+    qty: document.getElementById('med-qty').value.trim(),
+    qtyUnit: document.getElementById('med-qty-unit').value,
     start: document.getElementById('med-start').value,
     notes: document.getElementById('med-notes').value.trim(),
     active: true,
@@ -684,6 +703,7 @@ function saveMed() {
   toast('Traitement ajouté ✓');
   document.getElementById('med-name').value = '';
   document.getElementById('med-dose').value = '';
+  document.getElementById('med-qty').value = '';
   document.getElementById('med-notes').value = '';
 }
 
@@ -705,7 +725,7 @@ function renderMeds() {
     <div class="med-item">
       <div class="med-info">
         <h3>${m.name} ${m.dose ? '<span style="color:var(--muted);font-weight:400">'+m.dose+'</span>' : ''}</h3>
-        <p>${m.freq} · Depuis le ${fmt(m.start)}</p>
+        <p>${m.freq}${m.qty ? ' · ' + m.qty + ' ' + m.qtyUnit : ''} · Depuis le ${fmt(m.start)}</p>
         ${m.notes ? `<p style="margin-top:3px;font-size:11px;color:var(--muted)">${m.notes}</p>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
