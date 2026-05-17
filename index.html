@@ -11,6 +11,8 @@
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Google Identity Services (pour OAuth Google Drive) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <style>
 :root {
@@ -432,6 +434,75 @@ canvas { width: 100% !important; }
   </div>
 </div>
 
+<!-- PARAMÈTRES -->
+<div id="page-settings" class="page">
+  <div class="page-header">
+    <h1>Paramètres</h1>
+    <p>Sauvegarde, Google Drive & options</p>
+  </div>
+
+  <!-- Section : Sauvegarde locale -->
+  <div class="section-title">Sauvegarde locale</div>
+  <div class="card">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+      Exportez vos données pour les sauvegarder ou les analyser dans un tableur.
+      Le fichier <b>JSON</b> sert à la sauvegarde complète et à la restauration.
+      Le fichier <b>CSV</b> s'ouvre directement dans Google Sheets ou Excel.
+    </p>
+    <button class="btn btn-secondary" onclick="exportJSON()" style="margin-bottom:8px">⤓ Exporter en JSON (sauvegarde)</button>
+    <button class="btn btn-secondary" onclick="exportCSV()" style="margin-bottom:8px">⤓ Exporter en CSV (tableur)</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">⤒ Importer un fichier JSON</button>
+    <input type="file" id="import-file" accept=".json,application/json" style="display:none" onchange="handleImportFile(event)">
+  </div>
+
+  <!-- Section : Google Drive -->
+  <div class="section-title" style="margin-top:24px">Google Drive</div>
+  <div class="card">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+      Sauvegardez automatiquement dans votre Google Drive. L'app ne voit que ses propres sauvegardes,
+      jamais les autres fichiers de votre Drive. Consultez le guide pour obtenir un Client ID Google
+      (fichier <b>GUIDE-GOOGLE-DRIVE.md</b> à côté de cette page).
+    </p>
+    <div class="field">
+      <label>Google Client ID</label>
+      <input type="text" id="drive-client-id" placeholder="123456-xxxxxxx.apps.googleusercontent.com">
+    </div>
+    <button class="btn btn-secondary" onclick="saveDriveClientId()" style="margin-bottom:8px">Enregistrer le Client ID</button>
+
+    <div id="drive-status" style="font-size:13px;margin:10px 0 14px;padding:10px;border-radius:8px;background:var(--bg-elev);color:var(--muted)">
+      Non connecté
+    </div>
+
+    <button class="btn btn-primary" id="drive-connect-btn" onclick="connectDrive()" style="margin-bottom:8px;display:none">Se connecter à Google Drive</button>
+    <button class="btn btn-secondary" id="drive-backup-btn" onclick="manualDriveBackup()" style="margin-bottom:8px;display:none">↑ Sauvegarder maintenant sur Drive</button>
+    <button class="btn btn-secondary" id="drive-disconnect-btn" onclick="disconnectDrive()" style="display:none">Se déconnecter</button>
+  </div>
+
+  <!-- Section : Sauvegarde automatique -->
+  <div class="section-title" style="margin-top:24px">Sauvegarde automatique</div>
+  <div class="card">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+      À la première ouverture de la journée, l'app envoie automatiquement une sauvegarde sur votre Drive
+      (uniquement si vous y êtes connecté). Les 10 dernières sauvegardes sont conservées, les plus anciennes
+      sont supprimées automatiquement.
+    </p>
+    <label style="display:flex;align-items:center;gap:12px;font-size:14px;cursor:pointer;padding:8px 0">
+      <input type="checkbox" id="auto-backup-toggle" onchange="toggleAutoBackup(this.checked)" style="width:20px;height:20px;accent-color:var(--accent)">
+      <span>Activer la sauvegarde automatique quotidienne</span>
+    </label>
+    <p id="last-backup-info" style="font-size:12px;color:var(--muted);margin-top:8px"></p>
+  </div>
+
+  <!-- Section : À propos -->
+  <div class="section-title" style="margin-top:24px">À propos</div>
+  <div class="card">
+    <p style="font-size:13px;color:var(--muted);line-height:1.5">
+      <b>BipolTrack</b> · Vos données restent locales sur votre appareil.
+      Les sauvegardes Google Drive utilisent un accès limité (uniquement les fichiers créés par l'app).
+    </p>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
   <button class="nav-btn active" onclick="goPage('journal',this)">
@@ -453,6 +524,10 @@ canvas { width: 100% !important; }
   <button class="nav-btn" onclick="goPage('report',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
     Rapport
+  </button>
+  <button class="nav-btn" onclick="goPage('settings',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Réglages
   </button>
 </nav>
 
@@ -482,23 +557,6 @@ canvas { width: 100% !important; }
         </select>
       </div>
     </div>
-    <div class="row2">
-      <div class="field">
-        <label>Quantité par prise</label>
-        <input type="number" id="med-qty" placeholder="ex : 1" min="0.25" step="0.25" style="text-align:center">
-      </div>
-      <div class="field">
-        <label>Unité</label>
-        <select id="med-qty-unit">
-          <option value="comprimé(s)">Comprimé(s)</option>
-          <option value="gélule(s)">Gélule(s)</option>
-          <option value="ml">ml</option>
-          <option value="goutte(s)">Goutte(s)</option>
-          <option value="sachet(s)">Sachet(s)</option>
-          <option value="patch(s)">Patch(s)</option>
-        </select>
-      </div>
-    </div>
     <div class="field">
       <label>Date de début</label>
       <input type="date" id="med-start">
@@ -512,81 +570,15 @@ canvas { width: 100% !important; }
   </div>
 </div>
 
-<!-- MODAL ÉDITION ENTRÉE -->
-<div class="modal-overlay" id="entry-modal">
+<!-- MODAL IMPORT -->
+<div class="modal-overlay" id="import-modal">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title" id="entry-modal-title">Modifier l'entrée</div>
-    <input type="hidden" id="edit-entry-date">
-
-    <div class="field">
-      <label>Humeur</label>
-      <div class="mood-scale" id="edit-mood-scale">
-        <button class="mood-btn" data-v="1"><span class="score">1</span><span class="label">Dép.</span></button>
-        <button class="mood-btn" data-v="2"><span class="score">2</span></button>
-        <button class="mood-btn" data-v="3"><span class="score">3</span></button>
-        <button class="mood-btn" data-v="4"><span class="score">4</span></button>
-        <button class="mood-btn" data-v="5"><span class="score">5</span><span class="label">Neutre</span></button>
-        <button class="mood-btn" data-v="6"><span class="score">6</span></button>
-        <button class="mood-btn" data-v="7"><span class="score">7</span></button>
-        <button class="mood-btn" data-v="8"><span class="score">8</span></button>
-        <button class="mood-btn" data-v="9"><span class="score">9</span></button>
-        <button class="mood-btn" data-v="10"><span class="score">10</span><span class="label">Manie</span></button>
-      </div>
-    </div>
-
-    <div class="row2">
-      <div class="field">
-        <label>Sommeil (h)</label>
-        <input type="number" id="edit-sleep" min="0" max="12" step="0.5" style="text-align:center">
-      </div>
-      <div class="field">
-        <label>Anxiété (/10)</label>
-        <input type="number" id="edit-anxiety" min="0" max="10" step="1" style="text-align:center">
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Traitements pris</label>
-      <div class="chips" id="edit-meds-chips"></div>
-    </div>
-
-    <div class="field">
-      <label>Symptômes</label>
-      <div class="chips" id="edit-symptoms-chips">
-        <button class="chip" data-v="agitation">Agitation</button>
-        <button class="chip" data-v="fatigue">Fatigue</button>
-        <button class="chip" data-v="irritabilite">Irritabilité</button>
-        <button class="chip" data-v="idees_rapides">Idées rapides</button>
-        <button class="chip" data-v="concentration">Difficulté à se concentrer</button>
-        <button class="chip" data-v="isolement">Retrait social</button>
-        <button class="chip" data-v="impulsivite">Impulsivité</button>
-        <button class="chip" data-v="pleurs">Pleurs</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Effets secondaires</label>
-      <div class="chips" id="edit-effects-chips">
-        <button class="chip" data-v="nausee">Nausée</button>
-        <button class="chip" data-v="tremblements">Tremblements</button>
-        <button class="chip" data-v="sedation">Sédation</button>
-        <button class="chip" data-v="prise_poids">Prise de poids</button>
-        <button class="chip" data-v="secheresse">Bouche sèche</button>
-        <button class="chip" data-v="insomnie">Insomnie</button>
-        <button class="chip" data-v="vision">Troubles vision</button>
-        <button class="chip" data-v="libido">Baisse libido</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Note libre</label>
-      <textarea id="edit-note" style="height:80px" placeholder="Observations…"></textarea>
-    </div>
-
-    <button class="btn btn-primary" onclick="saveEditEntry()" style="margin-bottom:10px">Enregistrer les modifications</button>
-    <button class="btn btn-danger" onclick="deleteEntry()" style="margin-bottom:10px">Supprimer cette entrée</button>
-    <button class="btn btn-secondary" onclick="closeEntryModal()">Annuler</button>
+    <div class="modal-title">Importer des données</div>
+    <p id="import-summary" style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5"></p>
+    <button class="btn btn-primary" onclick="confirmImport('replace')" style="margin-bottom:8px">Remplacer toutes les données</button>
+    <button class="btn btn-secondary" onclick="confirmImport('merge')" style="margin-bottom:8px">Fusionner (sans doublons)</button>
+    <button class="btn btn-secondary" onclick="closeImportModal()">Annuler</button>
   </div>
 </div>
 
@@ -748,119 +740,8 @@ function renderHistory() {
       ${e.symptoms?.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">🔷 ${e.symptoms.join(', ')}</div>` : ''}
       ${e.effects?.length ? `<div style="font-size:12px;color:var(--warm);margin-top:4px">⚠ ${e.effects.join(', ')}</div>` : ''}
       ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
-      <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
-        <button onclick="openEntryModal('${e.date}')" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px;font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif">✏️ Modifier</button>
-        <button onclick="confirmDeleteEntry('${e.date}')" style="flex:1;background:rgba(239,83,80,0.08);border:1px solid rgba(239,83,80,0.25);border-radius:10px;padding:8px;font-size:13px;font-weight:600;color:var(--danger);cursor:pointer;font-family:'DM Sans',sans-serif">🗑 Supprimer</button>
-      </div>
     </div>`;
   }).join('');
-}
-
-// ── ENTRY MODAL ───────────────────────────────────────────────────
-let editMood = 0, editMeds = [], editSymptoms = [], editEffects = [];
-
-function openEntryModal(date) {
-  const e = entries.find(x => x.date === date);
-  if (!e) return;
-
-  editMood = e.mood;
-  editMeds = [...(e.meds || [])];
-  editSymptoms = [...(e.symptoms || [])];
-  editEffects = [...(e.effects || [])];
-
-  document.getElementById('edit-entry-date').value = date;
-  document.getElementById('entry-modal-title').textContent = 'Modifier · ' + fmt(date);
-  document.getElementById('edit-sleep').value = e.sleep;
-  document.getElementById('edit-anxiety').value = e.anxiety;
-  document.getElementById('edit-note').value = e.note || '';
-
-  // Mood buttons
-  document.querySelectorAll('#edit-mood-scale .mood-btn').forEach(btn => {
-    btn.classList.toggle('sel', +btn.dataset.v === editMood);
-    btn.onclick = () => {
-      editMood = +btn.dataset.v;
-      document.querySelectorAll('#edit-mood-scale .mood-btn').forEach(b => b.classList.remove('sel'));
-      btn.classList.add('sel');
-    };
-  });
-
-  // Meds chips
-  const wrap = document.getElementById('edit-meds-chips');
-  if (!meds.length) {
-    wrap.innerHTML = '<p style="font-size:13px;color:var(--muted)">Aucun traitement enregistré</p>';
-  } else {
-    wrap.innerHTML = '';
-    meds.filter(m => m.active !== false).forEach(m => {
-      const c = document.createElement('button');
-      c.className = 'chip' + (editMeds.includes(m.id) ? ' sel' : '');
-      c.textContent = m.name + (m.dose ? ' ' + m.dose : '');
-      c.onclick = () => {
-        c.classList.toggle('sel');
-        editMeds = editMeds.includes(m.id) ? editMeds.filter(x => x !== m.id) : [...editMeds, m.id];
-      };
-      wrap.appendChild(c);
-    });
-  }
-
-  // Symptom chips
-  document.querySelectorAll('#edit-symptoms-chips .chip').forEach(c => {
-    c.classList.toggle('sel', editSymptoms.includes(c.dataset.v));
-    c.onclick = () => {
-      c.classList.toggle('sel');
-      editSymptoms = editSymptoms.includes(c.dataset.v) ? editSymptoms.filter(x => x !== c.dataset.v) : [...editSymptoms, c.dataset.v];
-    };
-  });
-
-  // Effects chips
-  document.querySelectorAll('#edit-effects-chips .chip').forEach(c => {
-    c.classList.toggle('sel', editEffects.includes(c.dataset.v));
-    c.onclick = () => {
-      c.classList.toggle('sel');
-      editEffects = editEffects.includes(c.dataset.v) ? editEffects.filter(x => x !== c.dataset.v) : [...editEffects, c.dataset.v];
-    };
-  });
-
-  document.getElementById('entry-modal').classList.add('open');
-}
-
-function closeEntryModal() {
-  document.getElementById('entry-modal').classList.remove('open');
-}
-
-function saveEditEntry() {
-  if (!editMood) { toast('Sélectionnez une humeur', 'var(--danger)'); return; }
-  const date = document.getElementById('edit-entry-date').value;
-  const idx = entries.findIndex(e => e.date === date);
-  if (idx < 0) return;
-  entries[idx] = {
-    ...entries[idx],
-    mood: editMood,
-    sleep: +document.getElementById('edit-sleep').value,
-    anxiety: +document.getElementById('edit-anxiety').value,
-    meds: [...editMeds],
-    symptoms: [...editSymptoms],
-    effects: [...editEffects],
-    note: document.getElementById('edit-note').value.trim(),
-    ts: Date.now(),
-  };
-  DB.set('bt_entries', entries);
-  closeEntryModal();
-  renderHistory();
-  toast('Entrée modifiée ✓');
-}
-
-function confirmDeleteEntry(date) {
-  if (!confirm('Supprimer l\'entrée du ' + fmt(date) + ' ?')) return;
-  entries = entries.filter(e => e.date !== date);
-  DB.set('bt_entries', entries);
-  renderHistory();
-  toast('Entrée supprimée', 'var(--danger)');
-}
-
-function deleteEntry() {
-  const date = document.getElementById('edit-entry-date').value;
-  closeEntryModal();
-  setTimeout(() => confirmDeleteEntry(date), 200);
 }
 
 // ── TRAITEMENTS ───────────────────────────────────────────────────
@@ -878,8 +759,6 @@ function saveMed() {
     name,
     dose: document.getElementById('med-dose').value.trim(),
     freq: document.getElementById('med-freq').value,
-    qty: document.getElementById('med-qty').value.trim(),
-    qtyUnit: document.getElementById('med-qty-unit').value,
     start: document.getElementById('med-start').value,
     notes: document.getElementById('med-notes').value.trim(),
     active: true,
@@ -892,7 +771,6 @@ function saveMed() {
   toast('Traitement ajouté ✓');
   document.getElementById('med-name').value = '';
   document.getElementById('med-dose').value = '';
-  document.getElementById('med-qty').value = '';
   document.getElementById('med-notes').value = '';
 }
 
@@ -914,7 +792,7 @@ function renderMeds() {
     <div class="med-item">
       <div class="med-info">
         <h3>${m.name} ${m.dose ? '<span style="color:var(--muted);font-weight:400">'+m.dose+'</span>' : ''}</h3>
-        <p>${m.freq}${m.qty ? ' · ' + m.qty + ' ' + m.qtyUnit : ''} · Depuis le ${fmt(m.start)}</p>
+        <p>${m.freq} · Depuis le ${fmt(m.start)}</p>
         ${m.notes ? `<p style="margin-top:3px;font-size:11px;color:var(--muted)">${m.notes}</p>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
@@ -1168,6 +1046,444 @@ const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
 document.getElementById('report-from').value = d30.toISOString().slice(0,10);
 document.getElementById('report-to').value   = now.toISOString().slice(0,10);
 
+// ── IMPORT / EXPORT ───────────────────────────────────────────────
+// Télécharge un contenu sous forme de fichier dans le dossier "Téléchargements"
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Construit un suffixe de date pour le nom de fichier (ex: 2026-05-17)
+function fileStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Export JSON : sauvegarde complète (entries + meds)
+function exportJSON() {
+  const payload = {
+    app: 'BipolTrack',
+    version: 1,
+    exportDate: new Date().toISOString(),
+    entries: entries,
+    meds: meds,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  downloadFile(`bipoltrack-sauvegarde-${fileStamp()}.json`, json, 'application/json');
+  toast('Sauvegarde JSON téléchargée ✓');
+}
+
+// Échappe une valeur pour le CSV (séparateur ;)
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const s = String(value);
+  // Si la valeur contient ; " ou un saut de ligne → on l'entoure de guillemets et on double les guillemets internes
+  if (/[;"\n\r]/.test(s)) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// Convertit la liste d'IDs de traitements en noms lisibles (pour le CSV)
+function medIdsToNames(ids) {
+  if (!Array.isArray(ids)) return '';
+  return ids.map(id => {
+    const m = meds.find(x => x.id === id);
+    return m ? m.name : id;
+  }).join(' | ');
+}
+
+// Export CSV : une ligne par entrée du journal, ouvrable dans Google Sheets / Excel
+function exportCSV() {
+  if (!entries.length) {
+    toast('Aucune entrée à exporter', 'var(--danger)');
+    return;
+  }
+  const headers = [
+    'Date', 'Humeur (1-10)', 'Sommeil (h)', 'Anxiété (1-10)',
+    'Traitements pris', 'Symptômes', 'Effets secondaires', 'Note',
+  ];
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const lines = [headers.join(';')];
+  sorted.forEach(e => {
+    const row = [
+      e.date,
+      e.mood,
+      e.sleep,
+      e.anxiety,
+      medIdsToNames(e.meds),
+      Array.isArray(e.symptoms) ? e.symptoms.join(' | ') : '',
+      Array.isArray(e.effects) ? e.effects.join(' | ') : '',
+      e.note || '',
+    ].map(csvEscape);
+    lines.push(row.join(';'));
+  });
+  // BOM UTF-8 pour qu'Excel reconnaisse bien les accents
+  const csv = '﻿' + lines.join('\r\n');
+  downloadFile(`bipoltrack-journal-${fileStamp()}.csv`, csv, 'text/csv');
+  toast('Export CSV téléchargé ✓');
+}
+
+// ── IMPORT ────────────────────────────────────────────────────────
+let pendingImport = null; // { entries, meds }
+
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Validation minimale : on attend un objet avec entries (array) et/ou meds (array)
+      const importedEntries = Array.isArray(data.entries) ? data.entries : null;
+      const importedMeds    = Array.isArray(data.meds)    ? data.meds    : null;
+      if (!importedEntries && !importedMeds) {
+        toast('Fichier invalide : aucune donnée reconnue', 'var(--danger)');
+        return;
+      }
+      pendingImport = {
+        entries: importedEntries || [],
+        meds: importedMeds || [],
+      };
+      openImportModal();
+    } catch (err) {
+      toast('Fichier illisible (JSON invalide)', 'var(--danger)');
+    }
+  };
+  reader.readAsText(file);
+  // Permet de réimporter le même fichier deux fois de suite
+  event.target.value = '';
+}
+
+function openImportModal() {
+  const nbEntries = pendingImport.entries.length;
+  const nbMeds    = pendingImport.meds.length;
+  document.getElementById('import-summary').innerHTML =
+    `Fichier détecté : <b>${nbEntries}</b> entrée${nbEntries > 1 ? 's' : ''} de journal et ` +
+    `<b>${nbMeds}</b> traitement${nbMeds > 1 ? 's' : ''}.<br><br>` +
+    `Données actuelles dans l'app : <b>${entries.length}</b> entrée${entries.length > 1 ? 's' : ''}, ` +
+    `<b>${meds.length}</b> traitement${meds.length > 1 ? 's' : ''}.<br><br>` +
+    `Que voulez-vous faire ?`;
+  document.getElementById('import-modal').classList.add('open');
+}
+
+function closeImportModal() {
+  document.getElementById('import-modal').classList.remove('open');
+  pendingImport = null;
+}
+
+function confirmImport(mode) {
+  if (!pendingImport) { closeImportModal(); return; }
+
+  if (mode === 'replace') {
+    entries = pendingImport.entries.slice();
+    meds    = pendingImport.meds.slice();
+  } else if (mode === 'merge') {
+    // Fusion des traitements : par id (sinon par nom)
+    const medsById = new Map(meds.map(m => [m.id, m]));
+    const medsByName = new Map(meds.map(m => [m.name?.toLowerCase().trim(), m]));
+    pendingImport.meds.forEach(m => {
+      if (m.id && medsById.has(m.id)) return; // déjà présent
+      if (m.name && medsByName.has(m.name.toLowerCase().trim())) return;
+      meds.push(m);
+    });
+    // Fusion des entrées : par date (1 entrée par jour, on garde l'existante en cas de doublon)
+    const datesPresentes = new Set(entries.map(e => e.date));
+    pendingImport.entries.forEach(e => {
+      if (!e.date || datesPresentes.has(e.date)) return;
+      entries.push(e);
+      datesPresentes.add(e.date);
+    });
+  }
+
+  DB.set('bt_entries', entries);
+  DB.set('bt_meds', meds);
+  closeImportModal();
+  // Rafraîchir les vues si on est sur une page concernée
+  if (document.getElementById('page-history').classList.contains('active')) renderHistory();
+  if (document.getElementById('page-meds').classList.contains('active'))    renderMeds();
+  if (document.getElementById('page-stats').classList.contains('active'))   renderStats();
+  renderMedChips();
+  toast(mode === 'replace' ? 'Données remplacées ✓' : 'Données fusionnées ✓');
+}
+
+// ── GOOGLE DRIVE ──────────────────────────────────────────────────
+// Documentation : voir GUIDE-GOOGLE-DRIVE.md
+const DRIVE_FOLDER_NAME = 'BipolTrack-Sauvegardes';
+const DRIVE_MAX_BACKUPS = 10;
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+let driveClientId = DB.get('bt_drive_client_id', '');
+let driveTokenClient = null;
+let driveAccessToken = null;
+let driveFolderId = null;
+let pendingAutoBackup = false; // true si on doit lancer une sauvegarde dès qu'on aura un token
+
+// Initialise (ou réinitialise) le client OAuth Google
+function initDriveClient() {
+  if (!driveClientId) return false;
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+    return false; // lib pas encore chargée
+  }
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: driveClientId,
+    scope: DRIVE_SCOPE,
+    callback: (resp) => {
+      if (resp.error) {
+        console.warn('Erreur OAuth:', resp);
+        if (!pendingAutoBackup) toast('Connexion Google Drive refusée', 'var(--danger)');
+        pendingAutoBackup = false;
+        return;
+      }
+      driveAccessToken = resp.access_token;
+      updateDriveUI();
+      if (pendingAutoBackup) {
+        pendingAutoBackup = false;
+        doDriveBackup(true); // silencieux
+      } else {
+        toast('Connecté à Google Drive ✓');
+      }
+    },
+  });
+  return true;
+}
+
+// Enregistrement du Client ID renseigné par l'utilisateur
+function saveDriveClientId() {
+  const v = document.getElementById('drive-client-id').value.trim();
+  if (!v) { toast('Veuillez coller votre Client ID', 'var(--danger)'); return; }
+  if (!/\.apps\.googleusercontent\.com$/.test(v)) {
+    toast('Format inattendu (doit finir par .apps.googleusercontent.com)', 'var(--danger)');
+    return;
+  }
+  driveClientId = v;
+  DB.set('bt_drive_client_id', v);
+  driveAccessToken = null;
+  driveTokenClient = null;
+  initDriveClient();
+  updateDriveUI();
+  toast('Client ID enregistré ✓');
+}
+
+// Click "Se connecter"
+function connectDrive() {
+  if (!driveClientId) { toast('Renseignez d\'abord un Client ID', 'var(--danger)'); return; }
+  if (!driveTokenClient && !initDriveClient()) {
+    toast('La librairie Google n\'est pas encore prête, réessayez dans 2 s', 'var(--danger)');
+    return;
+  }
+  // 'consent' = forcer l'écran de consentement la première fois
+  driveTokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+// Click "Se déconnecter" : révoque le token côté Google
+function disconnectDrive() {
+  if (driveAccessToken && google?.accounts?.oauth2) {
+    google.accounts.oauth2.revoke(driveAccessToken, () => {});
+  }
+  driveAccessToken = null;
+  updateDriveUI();
+  toast('Déconnecté de Google Drive');
+}
+
+// Click "Sauvegarder maintenant"
+async function manualDriveBackup() {
+  if (!driveAccessToken) { connectDrive(); return; }
+  await doDriveBackup(false);
+}
+
+// === Appels à l'API Drive ===
+async function driveFetch(url, options = {}) {
+  options.headers = Object.assign({}, options.headers || {}, {
+    'Authorization': 'Bearer ' + driveAccessToken,
+  });
+  const resp = await fetch(url, options);
+  if (resp.status === 401) {
+    // Token expiré : on le redemande silencieusement
+    driveAccessToken = null;
+    throw new Error('Token expiré, reconnectez-vous');
+  }
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error('Drive API ' + resp.status + ': ' + txt.slice(0, 200));
+  }
+  return resp;
+}
+
+// Trouve le dossier de sauvegarde, ou le crée s'il n'existe pas
+async function findOrCreateFolder() {
+  if (driveFolderId) return driveFolderId;
+  const q = `name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const resp = await driveFetch(
+    'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)'
+  );
+  const data = await resp.json();
+  if (data.files && data.files.length > 0) {
+    driveFolderId = data.files[0].id;
+    return driveFolderId;
+  }
+  // Sinon, on crée le dossier
+  const createResp = await driveFetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
+  });
+  const created = await createResp.json();
+  driveFolderId = created.id;
+  return driveFolderId;
+}
+
+// Upload d'un fichier JSON dans le dossier (multipart)
+async function uploadBackupFile(filename, jsonContent) {
+  const folderId = await findOrCreateFolder();
+  const boundary = '-------bt' + Date.now();
+  const metadata = { name: filename, mimeType: 'application/json', parents: [folderId] };
+  const body =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(metadata) + `\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Type: application/json\r\n\r\n` +
+    jsonContent + `\r\n` +
+    `--${boundary}--`;
+  await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body: body,
+  });
+}
+
+// Supprime les sauvegardes au-delà de DRIVE_MAX_BACKUPS (les plus anciennes)
+async function cleanupOldBackups() {
+  const folderId = await findOrCreateFolder();
+  const q = `'${folderId}' in parents and trashed=false`;
+  const resp = await driveFetch(
+    'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name,createdTime)&orderBy=createdTime desc'
+  );
+  const data = await resp.json();
+  const files = data.files || [];
+  if (files.length <= DRIVE_MAX_BACKUPS) return;
+  const toDelete = files.slice(DRIVE_MAX_BACKUPS);
+  for (const f of toDelete) {
+    try {
+      await driveFetch('https://www.googleapis.com/drive/v3/files/' + f.id, { method: 'DELETE' });
+    } catch (e) { console.warn('Suppression échouée pour', f.name, e); }
+  }
+}
+
+// Orchestration complète : upload + nettoyage + mémorisation
+async function doDriveBackup(silent) {
+  if (!driveAccessToken) {
+    if (!silent) toast('Pas connecté à Google Drive', 'var(--danger)');
+    return;
+  }
+  try {
+    if (!silent) toast('Sauvegarde sur Drive en cours…', 'var(--accent)');
+    const payload = JSON.stringify({
+      app: 'BipolTrack', version: 1,
+      exportDate: new Date().toISOString(),
+      entries: entries, meds: meds,
+    }, null, 2);
+    const filename = `bipoltrack-sauvegarde-${fileStamp()}-${Date.now()}.json`;
+    await uploadBackupFile(filename, payload);
+    await cleanupOldBackups();
+    DB.set('bt_last_backup', todayISO());
+    updateDriveUI();
+    if (!silent) toast('Sauvegarde sur Drive réussie ✓');
+  } catch (err) {
+    console.error(err);
+    if (!silent) toast('Échec de la sauvegarde : ' + err.message, 'var(--danger)');
+  }
+}
+
+// Met à jour l'affichage de la section Drive (statut, boutons visibles)
+function updateDriveUI() {
+  const status = document.getElementById('drive-status');
+  const btnConnect    = document.getElementById('drive-connect-btn');
+  const btnBackup     = document.getElementById('drive-backup-btn');
+  const btnDisconnect = document.getElementById('drive-disconnect-btn');
+  if (!status) return;
+
+  if (!driveClientId) {
+    status.textContent = 'Aucun Client ID renseigné';
+    status.style.color = 'var(--muted)';
+    btnConnect.style.display = 'none';
+    btnBackup.style.display = 'none';
+    btnDisconnect.style.display = 'none';
+  } else if (!driveAccessToken) {
+    status.textContent = 'Client ID enregistré · non connecté';
+    status.style.color = 'var(--muted)';
+    btnConnect.style.display = 'block';
+    btnBackup.style.display = 'none';
+    btnDisconnect.style.display = 'none';
+  } else {
+    status.textContent = '✓ Connecté à Google Drive';
+    status.style.color = 'var(--success)';
+    btnConnect.style.display = 'none';
+    btnBackup.style.display = 'block';
+    btnDisconnect.style.display = 'block';
+  }
+
+  // Affichage "dernière sauvegarde"
+  const info = document.getElementById('last-backup-info');
+  if (info) {
+    const last = DB.get('bt_last_backup', '');
+    info.textContent = last
+      ? 'Dernière sauvegarde : ' + fmt(last)
+      : 'Aucune sauvegarde effectuée pour le moment.';
+  }
+}
+
+// ── SAUVEGARDE AUTOMATIQUE ────────────────────────────────────────
+function toggleAutoBackup(on) {
+  DB.set('bt_auto_backup', !!on);
+  toast(on ? 'Sauvegarde auto activée ✓' : 'Sauvegarde auto désactivée');
+  if (on) maybeAutoBackup();
+}
+
+// Vérifie au démarrage si on doit lancer une sauvegarde automatique
+function maybeAutoBackup() {
+  if (!DB.get('bt_auto_backup', false)) return;
+  if (!driveClientId) return;
+  const today = todayISO();
+  const last = DB.get('bt_last_backup', '');
+  if (last >= today) return; // déjà fait aujourd'hui
+  // Tente une connexion silencieuse (pas d'écran de consentement si déjà autorisé)
+  if (!driveTokenClient && !initDriveClient()) {
+    // La lib Google n'est pas encore chargée, on réessaye plus tard
+    setTimeout(maybeAutoBackup, 2000);
+    return;
+  }
+  pendingAutoBackup = true;
+  try {
+    driveTokenClient.requestAccessToken({ prompt: '' });
+  } catch (e) {
+    pendingAutoBackup = false;
+  }
+}
+
+// ── INITIALISATION PARAMÈTRES ─────────────────────────────────────
+(function initSettings() {
+  // Pré-remplir le champ Client ID
+  const input = document.getElementById('drive-client-id');
+  if (input && driveClientId) input.value = driveClientId;
+  // Pré-cocher la case auto
+  const toggle = document.getElementById('auto-backup-toggle');
+  if (toggle) toggle.checked = !!DB.get('bt_auto_backup', false);
+  // Init du client OAuth si possible
+  initDriveClient();
+  updateDriveUI();
+  // Tente l'auto-backup quelques secondes après chargement
+  setTimeout(maybeAutoBackup, 3000);
+})();
+
 // Service Worker
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -1177,8 +1493,8 @@ if ('serviceWorker' in navigator) {
 document.getElementById('med-modal').addEventListener('click', function(e) {
   if (e.target === this) closeMedModal();
 });
-document.getElementById('entry-modal').addEventListener('click', function(e) {
-  if (e.target === this) closeEntryModal();
+document.getElementById('import-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeImportModal();
 });
 </script>
 </body>
