@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BipolTrack">
-<meta name="theme-color" content="#0f1923">
+<meta name="theme-color" content="#F27405">
 <title>BipolTrack</title>
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,19 +16,19 @@
 
 <style>
 :root {
-  --bg: #0f1923;
-  --bg2: #162030;
-  --bg3: #1e2d3d;
-  --card: #1a2840;
-  --border: rgba(79,195,247,0.12);
-  --accent: #4fc3f7;
-  --accent2: #81d4fa;
-  --warm: #ffb74d;
-  --danger: #ef5350;
-  --success: #66bb6a;
-  --muted: #90a4ae;
-  --text: #e8f0f7;
-  --text2: #b0bec5;
+  --bg: #F2F2F2;
+  --bg2: #FFFFFF;
+  --bg3: #E8E8E8;
+  --card: #FFFFFF;
+  --border: rgba(242,116,5,0.2);
+  --accent: #F27405;
+  --accent2: #F25C05;
+  --warm: #F24405;
+  --danger: #8C0303;
+  --success: #4CAF50;
+  --muted: #888888;
+  --text: #1a1a1a;
+  --text2: #555555;
   --radius: 16px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -45,10 +45,27 @@ body {
   padding-bottom: calc(70px + var(--safe-bottom));
 }
 
+/* ── APP HEADER ── */
+.app-header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: calc(var(--safe-top) + 60px);
+  padding-top: var(--safe-top);
+  background: rgba(242,242,242,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.app-header img {
+  height: 44px;
+  width: auto;
+  object-fit: contain;
+}
+
 /* ── NAV ── */
 .nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-  background: rgba(15,25,35,0.95);
+  background: rgba(242,242,242,0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--border);
@@ -87,15 +104,25 @@ body {
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(242,116,5,0.07);
 }
 .card-label {
   font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
 }
 
+/* ── MOOD ICONS ── */
+.mood-icons-row {
+  display: flex; gap: 6px; margin-bottom: 4px;
+}
+.mood-icon-slot {
+  flex: 1; display: flex; justify-content: center; align-items: center; height: 38px;
+}
+.mood-icon-slot svg { width: 34px; height: 34px; }
+
 /* ── MOOD SCALE ── */
 .mood-scale {
-  display: flex; gap: 6px; margin: 10px 0;
+  display: flex; gap: 6px; margin: 4px 0 10px;
 }
 .mood-btn {
   flex: 1; border: 1.5px solid var(--border);
@@ -106,7 +133,7 @@ body {
 }
 .mood-btn .score { font-size: 16px; font-weight: 700; color: var(--text2); }
 .mood-btn .label { font-size: 8px; color: var(--muted); }
-.mood-btn:hover, .mood-btn.sel { border-color: var(--accent); background: rgba(79,195,247,0.08); }
+.mood-btn:hover, .mood-btn.sel { border-color: var(--accent); background: rgba(242,116,5,0.08); }
 .mood-btn.sel .score { color: var(--accent); }
 
 /* ── INPUTS ── */
@@ -121,7 +148,7 @@ body {
 }
 .field textarea { height: 90px; resize: none; line-height: 1.5; }
 .field input:focus, .field select:focus, .field textarea:focus {
-  border-color: rgba(79,195,247,0.5);
+  border-color: rgba(242,116,5,0.5);
 }
 .field select option { background: var(--bg2); }
 
@@ -134,7 +161,7 @@ input[type=range] {
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 22px; height: 22px;
   border-radius: 50%; background: var(--accent); cursor: pointer;
-  box-shadow: 0 0 0 4px rgba(79,195,247,0.15);
+  box-shadow: 0 0 0 4px rgba(242,116,5,0.15);
 }
 .slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
@@ -146,7 +173,7 @@ input[type=range]::-webkit-slider-thumb {
   font-size: 13px; cursor: pointer; color: var(--text2);
   transition: all 0.15s; font-family: 'DM Sans', sans-serif;
 }
-.chip.sel { border-color: var(--accent); background: rgba(79,195,247,0.1); color: var(--accent); }
+.chip.sel { border-color: var(--accent); background: rgba(242,116,5,0.1); color: var(--accent); }
 
 /* ── BUTTONS ── */
 .btn {
@@ -155,10 +182,10 @@ input[type=range]::-webkit-slider-thumb {
   font-size: 15px; font-weight: 600; cursor: pointer;
   transition: all 0.15s;
 }
-.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary { background: var(--accent); color: #FFFFFF; }
 .btn-primary:active { transform: scale(0.98); background: var(--accent2); }
 .btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
-.btn-danger { background: rgba(239,83,80,0.15); color: var(--danger); border: 1px solid rgba(239,83,80,0.3); }
+.btn-danger { background: rgba(140,3,3,0.1); color: var(--danger); border: 1px solid rgba(140,3,3,0.3); }
 
 /* ── ENTRIES LIST ── */
 .entry-card {
@@ -175,8 +202,8 @@ input[type=range]::-webkit-slider-thumb {
 .entry-meds { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .med-tag {
   font-size: 11px; padding: 2px 9px; border-radius: 12px;
-  background: rgba(79,195,247,0.1); color: var(--accent);
-  border: 1px solid rgba(79,195,247,0.2);
+  background: rgba(242,116,5,0.1); color: var(--accent);
+  border: 1px solid rgba(242,116,5,0.2);
 }
 .entry-note { font-size: 13px; color: var(--text2); margin-top: 8px; line-height: 1.4; }
 
@@ -188,7 +215,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 .med-info h3 { font-size: 15px; font-weight: 600; }
 .med-info p { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.med-badge { font-size: 11px; padding: 3px 9px; border-radius: 12px; background: rgba(255,183,77,0.15); color: var(--warm); border: 1px solid rgba(255,183,77,0.3); }
+.med-badge { font-size: 11px; padding: 3px 9px; border-radius: 12px; background: rgba(242,68,5,0.12); color: var(--warm); border: 1px solid rgba(242,68,5,0.3); }
 
 /* ── STATS ── */
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -242,6 +269,57 @@ canvas { width: 100% !important; }
 .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
 .modal-title { font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 16px; }
 
+/* ── DOC ── */
+.doc { font-size: 13px; line-height: 1.55; color: var(--text); }
+.doc p { margin: 0 0 10px; color: var(--muted); }
+.doc strong { color: var(--text); }
+.doc h2 {
+  font-family: 'DM Serif Display', serif; font-size: 17px; color: var(--accent);
+  margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.doc h2:first-child { margin-top: 0; }
+.doc h3 { font-size: 14px; color: var(--text); margin: 16px 0 8px; font-weight: 600; }
+.doc code {
+  background: var(--bg3); color: var(--accent); padding: 1px 6px;
+  border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+}
+.doc pre {
+  background: #F5F5F5; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; overflow-x: auto; margin: 8px 0 12px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px;
+  line-height: 1.5; color: var(--text);
+}
+.doc pre .c { color: #999999; font-style: italic; } /* commentaire */
+.doc pre .k { color: #F25C05; } /* clé */
+.doc pre .s { color: #2d8a2d; } /* string */
+.doc pre .n { color: #8C0303; } /* number */
+.doc-table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 14px;
+  font-size: 12px;
+}
+.doc-table th, .doc-table td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.doc-table th { background: var(--bg3); color: var(--text); font-weight: 600; }
+.doc-table code { font-size: 11px; }
+.doc-table tr:last-child td { border-bottom: none; }
+.doc-tag {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.3px; margin-left: 6px; vertical-align: middle;
+}
+.doc-tag.req { background: rgba(140,3,3,0.12); color: #8C0303; }
+.doc-tag.opt { background: rgba(160,160,160,0.15); color: var(--muted); }
+.doc-vals { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 12px; }
+.doc-vals code { font-size: 11px; }
+.doc-callout {
+  background: rgba(242,116,5,0.08); border-left: 3px solid var(--accent);
+  border-radius: 4px; padding: 10px 12px; margin: 10px 0;
+  font-size: 12.5px; color: var(--text);
+}
+.doc-callout.warn { background: rgba(242,68,5,0.08); border-left-color: var(--warm); }
+
 /* ── EMPTY STATE ── */
 .empty {
   text-align: center; padding: 48px 20px; color: var(--muted);
@@ -264,7 +342,7 @@ canvas { width: 100% !important; }
 .mood-6 { color: #9ccc65; border-color: rgba(156,204,101,0.4); }
 .mood-7 { color: #66bb6a; border-color: rgba(102,187,106,0.4); }
 .mood-8 { color: #4db6ac; border-color: rgba(77,182,172,0.4); }
-.mood-9 { color: #4fc3f7; border-color: rgba(79,195,247,0.4); }
+.mood-9 { color: #F25C05; border-color: rgba(242,92,5,0.4); }
 .mood-10 { color: #ab47bc; border-color: rgba(171,71,188,0.4); }
 
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -281,6 +359,114 @@ canvas { width: 100% !important; }
 
   <div class="card">
     <div class="card-label">Humeur générale</div>
+    <div class="mood-icons-row">
+      <!-- Slot 1 : Loup sombre (dépression) -->
+      <div class="mood-icon-slot">
+        <svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="18" cy="18" r="17.5" fill="#28282b" stroke="#111" stroke-width="1"/>
+          <!-- oreilles -->
+          <polygon points="6,17 11,4 17,15" fill="#3a3a3e"/>
+          <polygon points="8,17 11,7 16,15" fill="#222"/>
+          <polygon points="19,15 25,4 30,17" fill="#3a3a3e"/>
+          <polygon points="20,15 25,7 28,17" fill="#222"/>
+          <!-- tête -->
+          <ellipse cx="18" cy="23" rx="12" ry="10" fill="#3a3a3e"/>
+          <!-- museau -->
+          <ellipse cx="18" cy="26" rx="6" ry="4.5" fill="#484848"/>
+          <!-- sourcils froncés -->
+          <path d="M10 20 L15 22.5" stroke="#666" stroke-width="2" stroke-linecap="round"/>
+          <path d="M21 22.5 L26 20" stroke="#666" stroke-width="2" stroke-linecap="round"/>
+          <!-- yeux -->
+          <ellipse cx="14" cy="22" rx="2.2" ry="2.2" fill="#111"/>
+          <ellipse cx="22" cy="22" rx="2.2" ry="2.2" fill="#111"/>
+          <ellipse cx="14.6" cy="21.5" rx="0.7" ry="0.7" fill="#555"/>
+          <ellipse cx="22.6" cy="21.5" rx="0.7" ry="0.7" fill="#555"/>
+          <!-- nez -->
+          <ellipse cx="18" cy="24" rx="1.8" ry="1.2" fill="#111"/>
+          <!-- crocs -->
+          <polygon points="15,29 14.3,34 17,34" fill="#ddd"/>
+          <polygon points="21,29 24,34 21.5,34" fill="#ddd"/>
+        </svg>
+      </div>
+      <!-- Slots 2-4 vides -->
+      <div class="mood-icon-slot"></div>
+      <div class="mood-icon-slot"></div>
+      <div class="mood-icon-slot"></div>
+      <!-- Slot 5 : Renard calme (neutre) -->
+      <div class="mood-icon-slot">
+        <svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="18" cy="18" r="17.5" fill="#fff" stroke="#aaa" stroke-width="2"/>
+          <!-- oreilles -->
+          <polygon points="6,16 11,4 17,15" fill="#E8853A"/>
+          <polygon points="8,16 11,8 15,15" fill="#ffd5b8"/>
+          <polygon points="19,15 25,4 30,16" fill="#E8853A"/>
+          <polygon points="21,15 25,8 28,16" fill="#ffd5b8"/>
+          <!-- tête -->
+          <circle cx="18" cy="22" r="11" fill="#E8853A"/>
+          <!-- ventre/museau blanc -->
+          <ellipse cx="18" cy="26" rx="7" ry="5.5" fill="#fff8f4"/>
+          <!-- joues rosées -->
+          <ellipse cx="12" cy="23.5" rx="2.5" ry="1.8" fill="#f4a57a" opacity="0.55"/>
+          <ellipse cx="24" cy="23.5" rx="2.5" ry="1.8" fill="#f4a57a" opacity="0.55"/>
+          <!-- yeux fermés souriants -->
+          <path d="M13 21 Q15.5 19 17 21" fill="none" stroke="#4a2c0a" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M19 21 Q21.5 19 23 21" fill="none" stroke="#4a2c0a" stroke-width="1.6" stroke-linecap="round"/>
+          <!-- nez -->
+          <ellipse cx="18" cy="24.5" rx="1.5" ry="1" fill="#4a2c0a"/>
+          <!-- sourire -->
+          <path d="M15 26.5 Q18 29.5 21 26.5" fill="none" stroke="#4a2c0a" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <!-- Slots 6-9 vides -->
+      <div class="mood-icon-slot"></div>
+      <div class="mood-icon-slot"></div>
+      <div class="mood-icon-slot"></div>
+      <div class="mood-icon-slot"></div>
+      <!-- Slot 10 : Renard couronné (manie) -->
+      <div class="mood-icon-slot">
+        <svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+          <!-- Fond rouge bordeaux -->
+          <circle cx="18" cy="18" r="17.5" fill="#8C0303"/>
+          <!-- Couronne de feu : étoile 12 branches (tout dans les 36x36) -->
+          <polygon points="18,2 21,8 27,5 26,11 33,11 29,16 35,18 29,20 33,25 26,25 27,31 21,28 18,34 15,28 9,31 10,25 3,25 7,20 1,18 7,16 3,11 10,11 9,5 15,8" fill="#F27405"/>
+          <!-- Disque central -->
+          <circle cx="18" cy="19" r="12.5" fill="#F27405"/>
+          <!-- Oreilles (derrière la tête) -->
+          <polygon points="9,21 12,12 17,20" fill="#d96e1e"/>
+          <polygon points="10.5,20.5 13,14 16,20" fill="#ffd5b8"/>
+          <polygon points="19,20 24,12 27,21" fill="#d96e1e"/>
+          <polygon points="20,20 23,14 25.5,20.5" fill="#ffd5b8"/>
+          <!-- Tête -->
+          <ellipse cx="18" cy="24.5" rx="10" ry="8.5" fill="#E8853A"/>
+          <!-- Museau -->
+          <ellipse cx="18" cy="28.5" rx="6" ry="4" fill="#ffd5b8"/>
+          <!-- Joues rosées -->
+          <ellipse cx="11.5" cy="26.5" rx="2" ry="1.4" fill="#f4a57a" opacity="0.6"/>
+          <ellipse cx="24.5" cy="26.5" rx="2" ry="1.4" fill="#f4a57a" opacity="0.6"/>
+          <!-- Yeux excités -->
+          <circle cx="14" cy="23.5" r="2.8" fill="white"/>
+          <circle cx="22" cy="23.5" r="2.8" fill="white"/>
+          <circle cx="14" cy="23.5" r="1.7" fill="#1a0a00"/>
+          <circle cx="22" cy="23.5" r="1.7" fill="#1a0a00"/>
+          <circle cx="14.6" cy="23" r="0.6" fill="white"/>
+          <circle cx="22.6" cy="23" r="0.6" fill="white"/>
+          <!-- Nez -->
+          <ellipse cx="18" cy="27" rx="1.4" ry="1" fill="#1a0a00"/>
+          <!-- Bouche ouverte -->
+          <path d="M13.5 28.5 Q18 33 22.5 28.5" fill="#7a0202"/>
+          <path d="M15.5 29 L15.5 31 M18 29.5 L18 31.5 M20.5 29 L20.5 31" stroke="white" stroke-width="1" stroke-linecap="round"/>
+          <!-- Couronne (dessinée en dernier, au premier plan) -->
+          <path d="M11 21 L13 14 L16 18 L18 13 L20 18 L23 14 L25 21Z" fill="#FFD700" stroke="#cc8800" stroke-width="0.6"/>
+          <circle cx="13" cy="14.5" r="1.2" fill="#F24405"/>
+          <circle cx="18" cy="13.5" r="1.4" fill="#F24405"/>
+          <circle cx="23" cy="14.5" r="1.2" fill="#F24405"/>
+          <!-- Étincelles -->
+          <circle cx="7" cy="9" r="1.3" fill="#FFD700"/>
+          <circle cx="29" cy="7" r="1" fill="#FFD700"/>
+          <circle cx="5" cy="22" r="0.8" fill="#FFD700"/>
+        </svg>
+      </div>
+    </div>
     <div class="mood-scale" id="mood-scale">
       <button class="mood-btn" data-v="1"><span class="score">1</span><span class="label">Déprimé</span></button>
       <button class="mood-btn" data-v="2"><span class="score">2</span></button>
@@ -451,8 +637,9 @@ canvas { width: 100% !important; }
     </p>
     <button class="btn btn-secondary" onclick="exportJSON()" style="margin-bottom:8px">⤓ Exporter en JSON (sauvegarde)</button>
     <button class="btn btn-secondary" onclick="exportCSV()" style="margin-bottom:8px">⤓ Exporter en CSV (tableur)</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">⤒ Importer un fichier JSON</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()" style="margin-bottom:8px">⤒ Importer un fichier JSON</button>
     <input type="file" id="import-file" accept=".json,application/json" style="display:none" onchange="handleImportFile(event)">
+    <button class="btn btn-secondary" onclick="openDocModal()">📖 Format des données (aide)</button>
   </div>
 
   <!-- Section : Google Drive -->
@@ -502,6 +689,11 @@ canvas { width: 100% !important; }
     </p>
   </div>
 </div>
+
+<!-- APP HEADER -->
+<header class="app-header">
+  <img src="logo.png" alt="BipolTrack">
+</header>
 
 <!-- NAV -->
 <nav class="nav">
@@ -579,6 +771,297 @@ canvas { width: 100% !important; }
     <button class="btn btn-primary" onclick="confirmImport('replace')" style="margin-bottom:8px">Remplacer toutes les données</button>
     <button class="btn btn-secondary" onclick="confirmImport('merge')" style="margin-bottom:8px">Fusionner (sans doublons)</button>
     <button class="btn btn-secondary" onclick="closeImportModal()">Annuler</button>
+  </div>
+</div>
+
+<!-- MODAL DOCUMENTATION FORMAT JSON -->
+<div class="modal-overlay" id="doc-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Format des données BipolTrack</div>
+    <div class="doc">
+
+      <h2>Vue d'ensemble</h2>
+      <p>
+        Le fichier exporté par BipolTrack est un <strong>fichier JSON</strong> au format UTF-8.
+        Il contient l'ensemble de tes entrées de journal et la liste de tes traitements.
+        Tu peux l'éditer dans n'importe quel éditeur de texte
+        (VS Code, Bloc-notes, TextEdit en mode texte brut, etc.), puis le réimporter dans l'app
+        via <strong>Réglages → Importer un fichier JSON</strong>.
+      </p>
+      <p>Structure générale :</p>
+<pre><span class="k">{</span>
+  <span class="k">"app"</span>: <span class="s">"BipolTrack"</span>,
+  <span class="k">"version"</span>: <span class="n">1</span>,
+  <span class="k">"exportDate"</span>: <span class="s">"2026-05-17T10:23:45.123Z"</span>,
+  <span class="k">"entries"</span>: [ ... ],   <span class="c">// tableau d'entrées du journal</span>
+  <span class="k">"meds"</span>:    [ ... ]    <span class="c">// tableau de traitements</span>
+<span class="k">}</span></pre>
+
+      <h2>Champs racine</h2>
+      <table class="doc-table">
+        <thead><tr><th>Champ</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>app</code><span class="doc-tag opt">opt</span></td>
+            <td>string</td>
+            <td>Identifiant de l'app, toujours <code>"BipolTrack"</code>. Informatif uniquement.</td>
+          </tr>
+          <tr>
+            <td><code>version</code><span class="doc-tag opt">opt</span></td>
+            <td>number</td>
+            <td>Version du format. Actuellement <code>1</code>. Sera incrémentée si le format change.</td>
+          </tr>
+          <tr>
+            <td><code>exportDate</code><span class="doc-tag opt">opt</span></td>
+            <td>string ISO</td>
+            <td>Date de génération du fichier (ex: <code>"2026-05-17T10:23:45.123Z"</code>). Informatif.</td>
+          </tr>
+          <tr>
+            <td><code>entries</code><span class="doc-tag req">requis*</span></td>
+            <td>array</td>
+            <td>Tableau des entrées du journal (peut être vide <code>[]</code>).</td>
+          </tr>
+          <tr>
+            <td><code>meds</code><span class="doc-tag req">requis*</span></td>
+            <td>array</td>
+            <td>Tableau des traitements (peut être vide <code>[]</code>).</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:11px">* Au moins un des deux (<code>entries</code> ou <code>meds</code>) doit être présent et être un tableau, sinon l'import est refusé.</p>
+
+      <h2>Une entrée du journal — <code>entries[i]</code></h2>
+      <p>Une entrée représente <strong>une journée</strong>. Une seule entrée par date.</p>
+      <table class="doc-table">
+        <thead><tr><th>Champ</th><th>Type / format</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>date</code><span class="doc-tag req">req</span></td>
+            <td><code>"AAAA-MM-JJ"</code></td>
+            <td>Date du jour. Format ISO court. Sert de clé d'unicité (1 entrée/jour).</td>
+          </tr>
+          <tr>
+            <td><code>mood</code><span class="doc-tag req">req</span></td>
+            <td>entier 1–10</td>
+            <td>Humeur générale du jour. 1 = très bas, 10 = très haut.</td>
+          </tr>
+          <tr>
+            <td><code>sleep</code><span class="doc-tag req">req</span></td>
+            <td>nombre (h)</td>
+            <td>Nombre d'heures dormies (décimales acceptées : <code>7.5</code>).</td>
+          </tr>
+          <tr>
+            <td><code>anxiety</code><span class="doc-tag req">req</span></td>
+            <td>entier 1–10</td>
+            <td>Niveau d'anxiété. 1 = aucune, 10 = très forte.</td>
+          </tr>
+          <tr>
+            <td><code>meds</code><span class="doc-tag opt">opt</span></td>
+            <td>array de strings</td>
+            <td>Liste des <strong>id</strong> des traitements pris ce jour-là (cf. <code>meds[i].id</code>). Vide <code>[]</code> si aucun.</td>
+          </tr>
+          <tr>
+            <td><code>symptoms</code><span class="doc-tag opt">opt</span></td>
+            <td>array de strings</td>
+            <td>Symptômes ressentis. Valeurs reconnues : voir liste plus bas.</td>
+          </tr>
+          <tr>
+            <td><code>effects</code><span class="doc-tag opt">opt</span></td>
+            <td>array de strings</td>
+            <td>Effets secondaires ressentis. Valeurs reconnues : voir liste plus bas.</td>
+          </tr>
+          <tr>
+            <td><code>note</code><span class="doc-tag opt">opt</span></td>
+            <td>string</td>
+            <td>Note libre (commentaire personnel). Peut être vide <code>""</code>.</td>
+          </tr>
+          <tr>
+            <td><code>ts</code><span class="doc-tag opt">opt</span></td>
+            <td>number</td>
+            <td>Timestamp (millisecondes depuis 1970). Généré automatiquement par l'app, tu peux l'omettre lors d'une saisie manuelle.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Valeurs reconnues pour <code>symptoms</code></h3>
+      <p>Si tu utilises un code non listé ici, il sera <strong>conservé tel quel</strong> mais n'apparaîtra pas dans les statistiques pré-calculées. L'app utilise ces codes (en minuscules, sans accent, avec <code>_</code>) :</p>
+      <div class="doc-vals">
+        <code>agitation</code> <code>fatigue</code> <code>irritabilite</code> <code>idees_rapides</code>
+        <code>concentration</code> <code>isolement</code> <code>impulsivite</code> <code>pleurs</code>
+      </div>
+
+      <h3>Valeurs reconnues pour <code>effects</code></h3>
+      <div class="doc-vals">
+        <code>nausee</code> <code>tremblements</code> <code>sedation</code> <code>prise_poids</code>
+        <code>secheresse</code> <code>insomnie</code> <code>vision</code> <code>libido</code>
+      </div>
+
+      <h2>Un traitement — <code>meds[i]</code></h2>
+      <table class="doc-table">
+        <thead><tr><th>Champ</th><th>Type / format</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>id</code><span class="doc-tag req">req</span></td>
+            <td>string unique</td>
+            <td>Identifiant. L'app utilise un timestamp en string (<code>"1716200000000"</code>) mais tu peux mettre n'importe quelle chaîne (ex: <code>"lithium-400"</code>). Doit être unique dans <code>meds[]</code>.</td>
+          </tr>
+          <tr>
+            <td><code>name</code><span class="doc-tag req">req</span></td>
+            <td>string</td>
+            <td>Nom du médicament (ex: <code>"Lithium"</code>, <code>"Dépakine"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>dose</code><span class="doc-tag opt">opt</span></td>
+            <td>string</td>
+            <td>Dosage libre (ex: <code>"400 mg"</code>, <code>"2 cp"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>freq</code><span class="doc-tag opt">opt</span></td>
+            <td>string</td>
+            <td>Fréquence de prise. Valeurs habituelles : voir liste plus bas.</td>
+          </tr>
+          <tr>
+            <td><code>start</code><span class="doc-tag opt">opt</span></td>
+            <td><code>"AAAA-MM-JJ"</code></td>
+            <td>Date de début du traitement.</td>
+          </tr>
+          <tr>
+            <td><code>notes</code><span class="doc-tag opt">opt</span></td>
+            <td>string</td>
+            <td>Notes libres (ex: <code>"à prendre avec un repas"</code>).</td>
+          </tr>
+          <tr>
+            <td><code>active</code><span class="doc-tag opt">opt</span></td>
+            <td>boolean</td>
+            <td><code>true</code> si traitement en cours, <code>false</code> si arrêté. Défaut : <code>true</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Valeurs habituelles pour <code>freq</code></h3>
+      <div class="doc-vals">
+        <code>1x/jour</code> <code>2x/jour</code> <code>3x/jour</code>
+        <code>matin</code> <code>au coucher</code> <code>matin+soir</code>
+      </div>
+      <p style="font-size:11.5px">D'autres valeurs sont acceptées (texte libre), mais le menu déroulant de l'app ne les proposera pas.</p>
+
+      <h2>Exemple complet commenté</h2>
+<pre><span class="k">{</span>
+  <span class="k">"app"</span>: <span class="s">"BipolTrack"</span>,
+  <span class="k">"version"</span>: <span class="n">1</span>,
+  <span class="k">"exportDate"</span>: <span class="s">"2026-05-17T10:23:45.123Z"</span>,
+
+  <span class="k">"entries"</span>: <span class="k">[</span>
+    <span class="k">{</span>
+      <span class="k">"date"</span>:     <span class="s">"2026-05-15"</span>,         <span class="c">// 1 entrée par jour</span>
+      <span class="k">"mood"</span>:     <span class="n">7</span>,                    <span class="c">// 1 à 10</span>
+      <span class="k">"sleep"</span>:    <span class="n">7.5</span>,                  <span class="c">// heures, décimales OK</span>
+      <span class="k">"anxiety"</span>:  <span class="n">3</span>,                    <span class="c">// 1 à 10</span>
+      <span class="k">"meds"</span>:     <span class="k">[</span><span class="s">"lithium-400"</span><span class="k">]</span>,      <span class="c">// id présents dans meds[]</span>
+      <span class="k">"symptoms"</span>: <span class="k">[</span><span class="s">"irritabilite"</span><span class="k">]</span>,
+      <span class="k">"effects"</span>:  <span class="k">[]</span>,
+      <span class="k">"note"</span>:     <span class="s">"Bonne journée, sortie au parc."</span>
+    <span class="k">}</span>,
+    <span class="k">{</span>
+      <span class="k">"date"</span>:     <span class="s">"2026-05-16"</span>,
+      <span class="k">"mood"</span>:     <span class="n">5</span>,
+      <span class="k">"sleep"</span>:    <span class="n">6</span>,
+      <span class="k">"anxiety"</span>:  <span class="n">6</span>,
+      <span class="k">"meds"</span>:     <span class="k">[</span><span class="s">"lithium-400"</span>, <span class="s">"depakine-500"</span><span class="k">]</span>,
+      <span class="k">"symptoms"</span>: <span class="k">[</span><span class="s">"fatigue"</span>, <span class="s">"concentration"</span><span class="k">]</span>,
+      <span class="k">"effects"</span>:  <span class="k">[</span><span class="s">"secheresse"</span><span class="k">]</span>,
+      <span class="k">"note"</span>:     <span class="s">""</span>
+    <span class="k">}</span>
+  <span class="k">]</span>,
+
+  <span class="k">"meds"</span>: <span class="k">[</span>
+    <span class="k">{</span>
+      <span class="k">"id"</span>:     <span class="s">"lithium-400"</span>,    <span class="c">// référencé par entries[i].meds</span>
+      <span class="k">"name"</span>:   <span class="s">"Lithium"</span>,
+      <span class="k">"dose"</span>:   <span class="s">"400 mg"</span>,
+      <span class="k">"freq"</span>:   <span class="s">"2x/jour"</span>,
+      <span class="k">"start"</span>:  <span class="s">"2026-01-01"</span>,
+      <span class="k">"notes"</span>:  <span class="s">""</span>,
+      <span class="k">"active"</span>: <span class="n">true</span>
+    <span class="k">}</span>,
+    <span class="k">{</span>
+      <span class="k">"id"</span>:     <span class="s">"depakine-500"</span>,
+      <span class="k">"name"</span>:   <span class="s">"Dépakine"</span>,
+      <span class="k">"dose"</span>:   <span class="s">"500 mg"</span>,
+      <span class="k">"freq"</span>:   <span class="s">"matin+soir"</span>,
+      <span class="k">"start"</span>:  <span class="s">"2026-02-15"</span>,
+      <span class="k">"notes"</span>:  <span class="s">"avec un repas"</span>,
+      <span class="k">"active"</span>: <span class="n">true</span>
+    <span class="k">}</span>
+  <span class="k">]</span>
+<span class="k">}</span></pre>
+
+      <h2>Cas pratiques</h2>
+
+      <h3>Modifier un export existant</h3>
+      <p>
+        1. Va dans <strong>Réglages → Exporter en JSON</strong>.
+        2. Ouvre le fichier <code>.json</code> dans un éditeur de texte (VS Code, TextEdit, Bloc-notes).
+        3. Modifie les valeurs voulues.
+        4. Sauvegarde, puis reviens dans <strong>Réglages → Importer un fichier JSON</strong> et choisis <strong>Remplacer</strong>.
+      </p>
+      <div class="doc-callout warn">
+        Garde toujours une copie du fichier original avant de l'éditer, au cas où.
+      </div>
+
+      <h3>Saisir 30 entrées rétroactives à la main</h3>
+      <p>
+        Plus rapide que de cliquer 30 fois dans l'app. Pars du fichier
+        <strong>exemple téléchargeable</strong> (bouton ci-dessous), duplique le bloc
+        <code>{ "date": ..., ... }</code> autant de fois que nécessaire, et ajuste
+        les dates et valeurs. À l'import, choisis <strong>Fusionner</strong> pour ne pas écraser
+        d'éventuelles entrées déjà présentes.
+      </p>
+
+      <h3>Migrer depuis un tableur (Excel, Sheets)</h3>
+      <p>
+        Dans ton tableur, crée une colonne par champ (<code>date</code>, <code>mood</code>, <code>sleep</code>…).
+        Pour les listes (<code>meds</code>, <code>symptoms</code>, <code>effects</code>), utilise
+        une cellule avec les valeurs séparées par <code>|</code> puis transforme la feuille
+        en JSON via un outil en ligne (ex: <em>csvjson.com</em>) ou un petit script.
+        Enveloppe ensuite le tableau obtenu dans <code>{ "entries": [...], "meds": [...] }</code>.
+      </p>
+
+      <h3>Corriger une entrée existante</h3>
+      <p>
+        Si tu importes une entrée avec une <strong>date déjà utilisée</strong> :
+      </p>
+      <p style="margin-left:8px">
+        • <strong>Mode Remplacer</strong> → toutes les données existantes sont écrasées.<br>
+        • <strong>Mode Fusionner</strong> → l'entrée existante est <strong>conservée</strong>, la nouvelle est ignorée.
+      </p>
+      <p>
+        Pour modifier une entrée précise sans toucher au reste, l'approche la plus sûre est :
+        export → édition → import en mode Remplacer.
+      </p>
+
+      <h2>Pièges courants</h2>
+      <div class="doc-callout">
+        <strong>Doublons de date :</strong> deux entrées avec la même <code>date</code> dans <code>entries[]</code> provoqueront une perte de données (la première sera écrasée par la seconde au moment où l'app les chargera).
+      </div>
+      <div class="doc-callout">
+        <strong>Référence aux traitements :</strong> <code>entries[i].meds</code> contient des <code>id</code>, pas des noms. Si un id n'existe pas dans <code>meds[]</code>, le traitement n'apparaîtra pas dans l'historique (mais la donnée reste stockée).
+      </div>
+      <div class="doc-callout">
+        <strong>Format JSON strict :</strong> pas de virgule après le dernier élément d'un tableau/objet, guillemets doubles uniquement (pas de simples), encodage UTF-8.
+      </div>
+      <div class="doc-callout warn">
+        <strong>Sauvegarde avant import :</strong> avant un import en mode <em>Remplacer</em>, fais toujours un export JSON de tes données actuelles — c'est ta ceinture de sécurité.
+      </div>
+
+      <h2>Fichier exemple</h2>
+      <p>Télécharge un fichier JSON prêt à éditer (3 entrées, 2 traitements) pour t'entraîner :</p>
+      <button class="btn btn-primary" onclick="downloadSampleJSON()" style="margin-top:4px">⤓ Télécharger un fichier exemple</button>
+
+    </div>
+    <div style="height:16px"></div>
+    <button class="btn btn-secondary" onclick="closeDocModal()">Fermer</button>
   </div>
 </div>
 
@@ -835,17 +1318,17 @@ function drawMoodChart(data) {
   ctx.clearRect(0, 0, W, H);
 
   const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
-  if (sorted.length < 2) { ctx.fillStyle = '#546e7a'; ctx.font = '13px DM Sans'; ctx.fillText('Pas assez de données', 20, H/2); return; }
+  if (sorted.length < 2) { ctx.fillStyle = '#888888'; ctx.font = '13px DM Sans'; ctx.fillText('Pas assez de données', 20, H/2); return; }
 
   const pad = { t: 10, r: 10, b: 30, l: 28 };
   const cW = W - pad.l - pad.r; const cH = H - pad.t - pad.b;
 
   // grid lines
-  ctx.strokeStyle = 'rgba(79,195,247,0.07)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(242,116,5,0.12)'; ctx.lineWidth = 1;
   [2,4,6,8,10].forEach(v => {
     const y = pad.t + cH - (v/10)*cH;
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cW, y); ctx.stroke();
-    ctx.fillStyle = '#546e7a'; ctx.font = '10px DM Sans'; ctx.textAlign = 'right';
+    ctx.fillStyle = '#888888'; ctx.font = '10px DM Sans'; ctx.textAlign = 'right';
     ctx.fillText(v, pad.l - 4, y + 3);
   });
 
@@ -860,7 +1343,7 @@ function drawMoodChart(data) {
   const pts = sorted.map((e, i) => [pad.l + i * xStep, pad.t + cH - (e.mood/10)*cH]);
 
   const grad = ctx.createLinearGradient(0, 0, cW, 0);
-  grad.addColorStop(0, '#ef5350'); grad.addColorStop(0.5, '#4fc3f7'); grad.addColorStop(1, '#ab47bc');
+  grad.addColorStop(0, '#8C0303'); grad.addColorStop(0.5, '#F27405'); grad.addColorStop(1, '#F24405');
   ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
   ctx.beginPath();
   pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
@@ -869,7 +1352,7 @@ function drawMoodChart(data) {
   // dots
   pts.forEach(([x, y], i) => {
     ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI*2);
-    ctx.fillStyle = '#4fc3f7'; ctx.fill();
+    ctx.fillStyle = '#F27405'; ctx.fill();
   });
 }
 
@@ -893,7 +1376,7 @@ function drawSleepChart(data) {
     const x = pad.l + i * (cW / sorted.length);
     const barH = (e.sleep / 12) * cH;
     const y = pad.t + cH - barH;
-    const color = e.sleep >= 7 && e.sleep <= 9 ? '#66bb6a' : e.sleep < 5 ? '#ef5350' : '#ffa726';
+    const color = e.sleep >= 7 && e.sleep <= 9 ? '#4CAF50' : e.sleep < 5 ? '#8C0303' : '#F27405';
     ctx.fillStyle = color + '99';
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, barW, barH, 3);
@@ -902,13 +1385,13 @@ function drawSleepChart(data) {
   });
 
   // 7h & 9h lines
-  ['#546e7a'].forEach(() => {
+  ['#888888'].forEach(() => {
     [7, 9].forEach(h => {
-      ctx.strokeStyle = 'rgba(102,187,106,0.3)'; ctx.setLineDash([3,3]); ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(76,175,80,0.3)'; ctx.setLineDash([3,3]); ctx.lineWidth = 1;
       const y = pad.t + cH - (h/12)*cH;
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cW, y); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#546e7a'; ctx.font = '9px DM Sans'; ctx.textAlign = 'right';
+      ctx.fillStyle = '#888888'; ctx.font = '9px DM Sans'; ctx.textAlign = 'right';
       ctx.fillText(h+'h', pad.l - 3, y + 3);
     });
   });
@@ -1213,6 +1696,73 @@ function confirmImport(mode) {
   toast(mode === 'replace' ? 'Données remplacées ✓' : 'Données fusionnées ✓');
 }
 
+// ── DOCUMENTATION FORMAT ──────────────────────────────────────────
+function openDocModal()  { document.getElementById('doc-modal').classList.add('open'); }
+function closeDocModal() { document.getElementById('doc-modal').classList.remove('open'); }
+
+// Génère et télécharge un fichier exemple prêt à éditer (3 entrées, 2 traitements)
+function downloadSampleJSON() {
+  const sample = {
+    app: 'BipolTrack',
+    version: 1,
+    exportDate: new Date().toISOString(),
+    entries: [
+      {
+        date: '2026-05-15',
+        mood: 7,
+        sleep: 7.5,
+        anxiety: 3,
+        meds: ['lithium-400'],
+        symptoms: ['irritabilite'],
+        effects: [],
+        note: 'Bonne journée, sortie au parc.',
+      },
+      {
+        date: '2026-05-16',
+        mood: 5,
+        sleep: 6,
+        anxiety: 6,
+        meds: ['lithium-400', 'depakine-500'],
+        symptoms: ['fatigue', 'concentration'],
+        effects: ['secheresse'],
+        note: 'Journée fatigante, beaucoup de stress au travail.',
+      },
+      {
+        date: '2026-05-17',
+        mood: 8,
+        sleep: 8,
+        anxiety: 2,
+        meds: ['lithium-400', 'depakine-500'],
+        symptoms: [],
+        effects: [],
+        note: '',
+      },
+    ],
+    meds: [
+      {
+        id: 'lithium-400',
+        name: 'Lithium',
+        dose: '400 mg',
+        freq: '2x/jour',
+        start: '2026-01-01',
+        notes: '',
+        active: true,
+      },
+      {
+        id: 'depakine-500',
+        name: 'Dépakine',
+        dose: '500 mg',
+        freq: 'matin+soir',
+        start: '2026-02-15',
+        notes: 'à prendre avec un repas',
+        active: true,
+      },
+    ],
+  };
+  downloadFile('bipoltrack-exemple.json', JSON.stringify(sample, null, 2), 'application/json');
+  toast('Fichier exemple téléchargé ✓');
+}
+
 // ── GOOGLE DRIVE ──────────────────────────────────────────────────
 // Documentation : voir GUIDE-GOOGLE-DRIVE.md
 const DRIVE_FOLDER_NAME = 'BipolTrack-Sauvegardes';
@@ -1495,6 +2045,9 @@ document.getElementById('med-modal').addEventListener('click', function(e) {
 });
 document.getElementById('import-modal').addEventListener('click', function(e) {
   if (e.target === this) closeImportModal();
+});
+document.getElementById('doc-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDocModal();
 });
 </script>
 </body>
