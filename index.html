@@ -16,9 +16,9 @@
 
 <style>
 :root {
-  --bg: #F2F2F2;
+  --bg: #FFF8F2;
   --bg2: #FFFFFF;
-  --bg3: #E8E8E8;
+  --bg3: #F5EDE0;
   --card: #FFFFFF;
   --border: rgba(242,116,5,0.2);
   --accent: #F27405;
@@ -48,16 +48,16 @@ body {
 /* ── APP HEADER ── */
 .app-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  height: calc(var(--safe-top) + 60px);
+  height: calc(var(--safe-top) + 100px);
   padding-top: var(--safe-top);
-  background: rgba(242,242,242,0.95);
+  background: rgba(255,248,242,0.97);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: center;
 }
 .app-header img {
-  height: 44px;
+  height: 88px;
   width: auto;
   object-fit: contain;
 }
@@ -65,7 +65,7 @@ body {
 /* ── NAV ── */
 .nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-  background: rgba(242,242,242,0.95);
+  background: rgba(255,248,242,0.97);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--border);
@@ -83,7 +83,7 @@ body {
 .nav-btn svg { width: 22px; height: 22px; }
 
 /* ── PAGES ── */
-.page { display: none; padding: calc(var(--safe-top) + 60px) 16px 16px; }
+.page { display: none; padding: calc(var(--safe-top) + 108px) 16px 16px; }
 .page.active { display: block; }
 
 /* ── HEADER ── */
@@ -322,15 +322,14 @@ canvas { width: 100% !important; }
 
 /* ── EDIT ENTRY BUTTON ── */
 .entry-edit-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  margin-top: 10px; padding: 6px 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
   background: rgba(242,116,5,0.08); border: 1.5px solid rgba(242,116,5,0.25);
-  border-radius: 20px; font-size: 12px; font-weight: 600;
-  color: var(--accent); cursor: pointer; font-family: 'DM Sans', sans-serif;
+  border-radius: 50%; color: var(--accent); cursor: pointer;
   transition: all 0.15s;
 }
-.entry-edit-btn:hover { background: rgba(242,116,5,0.15); border-color: var(--accent); }
-.entry-edit-btn svg { width: 13px; height: 13px; }
+.entry-edit-btn:hover { background: rgba(242,116,5,0.18); border-color: var(--accent); }
+.entry-edit-btn svg { width: 14px; height: 14px; }
 
 /* ── EMPTY STATE ── */
 .empty {
@@ -904,6 +903,20 @@ canvas { width: 100% !important; }
   </div>
 </div>
 
+<!-- MODAL CONFIRMATION SANS TRAITEMENT -->
+<div class="modal-overlay" id="no-meds-modal">
+  <div class="modal" style="text-align:center">
+    <div class="modal-handle"></div>
+    <div style="font-size:36px;margin-bottom:12px">💊</div>
+    <div class="modal-title" style="font-size:18px;margin-bottom:8px">Aucun traitement sélectionné</div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.6">
+      Vous n'avez coché aucun médicament.<br>Confirmez-vous n'avoir pris aucun traitement aujourd'hui ?
+    </p>
+    <button class="btn btn-primary" onclick="doSaveEntry()" style="margin-bottom:10px">Oui, enregistrer quand même</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('no-meds-modal').classList.remove('open')">Retour</button>
+  </div>
+</div>
+
 <!-- MODAL ÉDITION ENTRÉE -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
@@ -1391,6 +1404,16 @@ function renderMedChips() {
 
 function saveEntry() {
   if (!selectedMood) { toast('Sélectionnez une humeur', 'var(--danger)'); return; }
+  // Si des traitements sont enregistrés mais aucun n'est coché → confirmation
+  if (meds.length > 0 && selectedMeds.length === 0) {
+    document.getElementById('no-meds-modal').classList.add('open');
+    return;
+  }
+  doSaveEntry();
+}
+
+function doSaveEntry() {
+  document.getElementById('no-meds-modal').classList.remove('open');
   const today = todayISO();
   const existing = entries.findIndex(e => e.date === today);
   const entry = {
@@ -1409,7 +1432,6 @@ function saveEntry() {
   DB.set('bt_entries', entries);
   markDataChanged();
   toast('Journée enregistrée ✓');
-  // reset mood
   document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel'));
   selectedMood = 0;
 }
@@ -1432,6 +1454,9 @@ function renderHistory() {
       <div class="entry-header">
         <span class="entry-date">${fmt(e.date)}</span>
         <span class="mood-badge mood-${e.mood}">Humeur ${e.mood}/10</span>
+        <button class="entry-edit-btn" onclick="openEditModal('${e.date}')" title="Modifier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
       </div>
       <div style="display:flex;gap:16px;font-size:12px;color:var(--muted)">
         <span>💤 ${e.sleep}h</span>
@@ -1441,10 +1466,6 @@ function renderHistory() {
       ${e.symptoms?.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">🔷 ${e.symptoms.join(', ')}</div>` : ''}
       ${e.effects?.length ? `<div style="font-size:12px;color:var(--warm);margin-top:4px">⚠ ${e.effects.join(', ')}</div>` : ''}
       ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
-      <button class="entry-edit-btn" onclick="openEditModal('${e.date}')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Modifier
-      </button>
     </div>`;
   }).join('');
 }
