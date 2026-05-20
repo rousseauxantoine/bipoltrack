@@ -254,11 +254,23 @@ input[type=range]::-webkit-slider-thumb {
   display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
 }
 .cal-day {
-  aspect-ratio: 1; border-radius: 3px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; line-height: 1;
+  border-radius: 3px;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: 2px 1px 2px;
+  min-height: 26px;
   background: var(--bg3);
 }
+.cal-day-num {
+  font-size: 7px; font-weight: 700; line-height: 1;
+  color: rgba(0,0,0,0.35);
+  align-self: flex-start; padding-left: 1px;
+}
+.cal-day.cal-depress .cal-day-num,
+.cal-day.cal-manic .cal-day-num,
+.cal-day.cal-neutral .cal-day-num { color: rgba(255,255,255,0.75); }
+.cal-day-icon { font-size: 9px; line-height: 1; }
+.cal-day-clickable { cursor: pointer; transition: opacity 0.15s; }
+.cal-day-clickable:active { opacity: 0.7; }
 .cal-day.cal-empty { background: transparent; }
 .cal-day.cal-depress { background: #4A90D9; }
 .cal-day.cal-neutral { background: #52B96A; }
@@ -1471,6 +1483,14 @@ journalDateInput.max = todayISO();
 
 function getJournalDate() { return journalDateInput.value || todayISO(); }
 
+function openJournalForDate(date) {
+  // Naviguer vers le journal et sélectionner la date
+  const journalBtn = document.querySelector('.nav-btn[onclick*="journal"]');
+  goPage('journal', journalBtn);
+  journalDateInput.value = date;
+  onJournalDateChange();
+}
+
 function onJournalDateChange() {
   const date = getJournalDate();
   const isToday = date === todayISO();
@@ -2001,8 +2021,10 @@ function renderAnnualCalendar() {
       }
 
       if (ds === todayStr) cls += ' cal-today';
+      const action = entry ? `openEditModal('${ds}')` : `openJournalForDate('${ds}')`;
+      cls += ' cal-day-clickable';
 
-      html += `<div class="${cls}">${icon}</div>`;
+      html += `<div class="${cls}" onclick="${action}"><span class="cal-day-num">${d}</span>${icon ? `<span class="cal-day-icon">${icon}</span>` : ''}</div>`;
     }
 
     html += '</div></div>';
