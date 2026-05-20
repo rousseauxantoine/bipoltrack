@@ -1967,25 +1967,35 @@ function computePhaseProjections() {
     }
   }
 
-  // === FUTUR : cycles alternés de 21 jours depuis la dernière entrée de phase ===
-  const lastEntry  = sorted[sorted.length - 1];
-  const lastPhase  = moodPhase(lastEntry.mood);
-  const lastDate   = new Date(lastEntry.date + 'T00:00:00');
-  const todayDate  = new Date(todayStr + 'T00:00:00');
-  const daysSinceLast = Math.round((todayDate - lastDate) / 86400000);
+  // === Trouver la date du dernier CHANGEMENT de phase ===
+  // (pas la dernière entrée, mais le dernier moment où la phase a basculé)
+  let lastChangeDate = sorted[0].date;
+  let currentPhase   = moodPhase(sorted[0].mood);
+  for (let i = 1; i < sorted.length; i++) {
+    const p = moodPhase(sorted[i].mood);
+    if (p !== currentPhase) {
+      lastChangeDate = sorted[i].date;
+      currentPhase   = p;
+    }
+  }
+
+  // === FUTUR : cycles de 21 jours à partir du DERNIER CHANGEMENT de phase ===
+  const todayDate    = new Date(todayStr + 'T00:00:00');
+  const changeDate   = new Date(lastChangeDate + 'T00:00:00');
+  const daysSinceChange = Math.round((todayDate - changeDate) / 86400000);
 
   for (let i = 1; i <= PHASE_DAYS * 8; i++) {   // ~168 jours en avance
-    const totalDays = daysSinceLast + i;
+    const totalDays = daysSinceChange + i;
     const cycle = Math.floor(totalDays / PHASE_DAYS) % 2;
     const phase = cycle === 0
-      ? lastPhase
-      : (lastPhase === 'depression' ? 'elevated' : 'depression');
+      ? currentPhase
+      : (currentPhase === 'depression' ? 'elevated' : 'depression');
     const d = new Date(todayDate);
     d.setDate(d.getDate() + i);
     simMap[d.toISOString().slice(0, 10)] = phase;
   }
 
-  return { map: simMap, fromDate: lastEntry.date, phase: lastPhase };
+  return { map: simMap, fromDate: lastChangeDate, phase: currentPhase };
 }
 
 function renderAnnualCalendar() {
