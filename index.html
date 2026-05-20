@@ -1657,9 +1657,6 @@ const d30 = new Date(now); d30.setDate(d30.getDate() - 30);
 document.getElementById('report-from').value = d30.toISOString().slice(0,10);
 document.getElementById('report-to').value   = now.toISOString().slice(0,10);
 
-// Statut de la clé API Claude dans Réglages
-updateClaudeKeyStatus();
-
 // ── IMPORT / EXPORT ───────────────────────────────────────────────
 // Télécharge un contenu sous forme de fichier dans le dossier "Téléchargements"
 function downloadFile(filename, content, mime) {
@@ -2712,6 +2709,8 @@ window.addEventListener('offline', () => updateSyncUI());
   initDriveClient();
   updateSyncUI();
   setTimeout(maybeAutoSync, 3000);
+  // Statut de la clé API Claude (News)
+  updateClaudeKeyStatus();
 })();
 
 // Service Worker

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bipoltrack-v2';
+const CACHE_NAME = 'bipoltrack-v3';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
