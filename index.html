@@ -226,6 +226,75 @@ input[type=range]::-webkit-slider-thumb {
 .stat-val { font-family: 'DM Serif Display', serif; font-size: 32px; color: var(--accent); }
 .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
+/* ── CALENDRIER ANNUEL ── */
+.cal-nav-btn {
+  background: none; border: 1.5px solid var(--border); border-radius: 8px;
+  width: 28px; height: 28px; font-size: 16px; color: var(--accent);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Sans', sans-serif; line-height: 1;
+}
+.cal-nav-btn:hover { background: rgba(242,116,5,0.08); }
+.cal-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px;
+}
+.cal-month-name {
+  font-size: 11px; font-weight: 700; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.cal-week-hdr {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  margin-bottom: 2px;
+}
+.cal-week-hdr span {
+  font-size: 8px; color: var(--muted); text-align: center;
+  font-weight: 600;
+}
+.cal-days {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.cal-day {
+  aspect-ratio: 1; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1;
+  background: var(--bg3);
+}
+.cal-day.cal-empty { background: transparent; }
+.cal-day.cal-depress { background: #4A90D9; }
+.cal-day.cal-neutral { background: #52B96A; }
+.cal-day.cal-manic   { background: #E53935; }
+.cal-day.cal-today {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+/* Jours projetés (hachures) */
+.cal-day.cal-proj-depress {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(74,144,217,0.35) 0px, rgba(74,144,217,0.35) 2px,
+    var(--bg3) 2px, var(--bg3) 6px
+  );
+  border: 1px solid rgba(74,144,217,0.5);
+}
+.cal-day.cal-proj-elevated {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(82,185,106,0.35) 0px, rgba(82,185,106,0.35) 2px,
+    var(--bg3) 2px, var(--bg3) 6px
+  );
+  border: 1px solid rgba(82,185,106,0.5);
+}
+.cal-legend {
+  display: flex; flex-wrap: wrap; gap: 8px 14px;
+  margin-top: 14px;
+}
+.cal-legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted);
+}
+.cal-dot {
+  width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+}
+
 /* ── CHART ── */
 .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .chart-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
@@ -319,6 +388,29 @@ canvas { width: 100% !important; }
   font-size: 12.5px; color: var(--text);
 }
 .doc-callout.warn { background: rgba(242,68,5,0.08); border-left-color: var(--warm); }
+
+/* ── JOURNAL DATE INPUT ── */
+#journal-date {
+  margin-top: 6px;
+  background: none;
+  border: none;
+  border-bottom: 1.5px solid var(--border);
+  border-radius: 0;
+  padding: 4px 2px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  width: auto;
+  -webkit-appearance: none;
+}
+#journal-date:focus { border-bottom-color: var(--accent); }
+
+/* ── CHIPS CYCLE ── */
+.chip.chip-cycle { color: #a0426d; border-color: rgba(160,66,109,0.25); }
+.chip.chip-cycle.sel { border-color: #a0426d; background: rgba(160,66,109,0.1); color: #a0426d; }
 
 /* ── EDIT ENTRY BUTTON ── */
 .entry-edit-btn {
@@ -432,8 +524,8 @@ canvas { width: 100% !important; }
 <!-- PAGES -->
 <div id="page-journal" class="page active">
   <div class="page-header">
-    <h1>Journal du jour</h1>
-    <p id="today-date"></p>
+    <h1 id="journal-title">Journal du jour</h1>
+    <input type="date" id="journal-date" onchange="onJournalDateChange()">
   </div>
 
   <div class="card">
@@ -589,6 +681,14 @@ canvas { width: 100% !important; }
   </div>
 
   <div class="card">
+    <div class="card-label">Informations menstruation</div>
+    <div class="chips" id="menstruation-chips">
+      <button class="chip chip-cycle" data-v="regles">🩸 Règles</button>
+      <button class="chip chip-cycle" data-v="ovulation">🌸 Ovulation</button>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-label">Effets secondaires</div>
     <div class="chips" id="effects-chips">
       <button class="chip" data-v="nausee">Nausée</button>
@@ -645,6 +745,28 @@ canvas { width: 100% !important; }
   <div class="chart-wrap">
     <div class="chart-title">Qualité du sommeil</div>
     <canvas id="sleep-chart" height="120"></canvas>
+  </div>
+
+  <div class="chart-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="chart-title" style="margin-bottom:0">Calendrier annuel</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="cal-nav-btn" onclick="calYear--;renderAnnualCalendar()">‹</button>
+        <span id="cal-year-label" style="font-size:13px;font-weight:700;color:var(--text);min-width:36px;text-align:center"></span>
+        <button class="cal-nav-btn" onclick="calYear++;renderAnnualCalendar()">›</button>
+      </div>
+    </div>
+    <div id="annual-calendar"></div>
+    <div class="cal-legend">
+      <span class="cal-legend-item"><span class="cal-dot" style="background:#4A90D9"></span>Dépression</span>
+      <span class="cal-legend-item"><span class="cal-dot" style="background:#52B96A"></span>Neutre</span>
+      <span class="cal-legend-item"><span class="cal-dot" style="background:#E53935"></span>Manie</span>
+      <span class="cal-legend-item"><span class="cal-dot" style="background:repeating-linear-gradient(45deg,rgba(74,144,217,0.5) 0px,rgba(74,144,217,0.5) 2px,#e8e8e8 2px,#e8e8e8 6px);border:1px solid rgba(74,144,217,0.5)"></span>Dépression (sim.)</span>
+      <span class="cal-legend-item"><span class="cal-dot" style="background:repeating-linear-gradient(45deg,rgba(82,185,106,0.5) 0px,rgba(82,185,106,0.5) 2px,#e8e8e8 2px,#e8e8e8 6px);border:1px solid rgba(82,185,106,0.5)"></span>Manie (sim.)</span>
+      <span class="cal-legend-item">🩸 Règles</span>
+      <span class="cal-legend-item">🌸 Ovulation</span>
+    </div>
+    <p id="cal-proj-info" style="font-size:11px;color:var(--muted);margin-top:8px;font-style:italic"></p>
   </div>
 </div>
 
@@ -969,6 +1091,14 @@ canvas { width: 100% !important; }
         <button class="chip" data-v="isolement">Retrait social</button>
         <button class="chip" data-v="impulsivite">Impulsivité</button>
         <button class="chip" data-v="pleurs">Pleurs</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Informations menstruation</label>
+      <div class="chips" id="edit-menstruation-chips">
+        <button class="chip chip-cycle" data-v="regles">🩸 Règles</button>
+        <button class="chip chip-cycle" data-v="ovulation">🌸 Ovulation</button>
       </div>
     </div>
 
@@ -1310,6 +1440,7 @@ let selectedMood = 0;
 let selectedMeds = [];
 let selectedSymptoms = [];
 let selectedEffects = [];
+let selectedMenstruation = [];
 
 // ── UTILS ─────────────────────────────────────────────────────────
 const fmt = d => new Date(d).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' });
@@ -1334,7 +1465,70 @@ function goPage(id, btn) {
 }
 
 // ── JOURNAL ───────────────────────────────────────────────────────
-document.getElementById('today-date').textContent = fmt(todayISO());
+const journalDateInput = document.getElementById('journal-date');
+journalDateInput.value = todayISO();
+journalDateInput.max = todayISO();
+
+function getJournalDate() { return journalDateInput.value || todayISO(); }
+
+function onJournalDateChange() {
+  const date = getJournalDate();
+  const isToday = date === todayISO();
+  document.getElementById('journal-title').textContent = isToday ? 'Journal du jour' : 'Journal — ' + fmt(date);
+
+  // Pré-remplir si une entrée existe pour cette date
+  const existing = entries.find(e => e.date === date);
+
+  // Reset humeur
+  document.querySelectorAll('#page-journal .mood-btn').forEach(b => b.classList.remove('sel'));
+  selectedMood = 0;
+
+  // Reset sliders
+  document.getElementById('sleep-slider').value = existing ? existing.sleep : 7;
+  document.getElementById('sleep-val').textContent = (existing ? existing.sleep : 7) + 'h';
+  document.getElementById('anxiety-slider').value = existing ? existing.anxiety : 0;
+  document.getElementById('anxiety-val').textContent = (existing ? existing.anxiety : 0) + '/10';
+
+  // Reset chips
+  selectedMeds = [];
+  selectedSymptoms = [];
+  selectedEffects = [];
+  selectedMenstruation = [];
+  document.querySelectorAll('#symptoms-chips .chip, #effects-chips .chip, #menstruation-chips .chip').forEach(c => c.classList.remove('sel'));
+  document.querySelectorAll('#meds-chips .chip').forEach(c => c.classList.remove('sel'));
+
+  if (existing) {
+    // Humeur
+    selectedMood = existing.mood;
+    document.querySelectorAll('#page-journal .mood-btn').forEach(b => {
+      if (+b.dataset.v === existing.mood) b.classList.add('sel');
+    });
+    // Médicaments
+    selectedMeds = [...(existing.meds || [])];
+    document.querySelectorAll('#meds-chips .chip').forEach(c => {
+      if (selectedMeds.includes(c.dataset.id)) c.classList.add('sel');
+    });
+    // Symptômes
+    selectedSymptoms = [...(existing.symptoms || [])];
+    document.querySelectorAll('#symptoms-chips .chip').forEach(c => {
+      if (selectedSymptoms.includes(c.dataset.v)) c.classList.add('sel');
+    });
+    // Menstruation
+    selectedMenstruation = [...(existing.menstruation || [])];
+    document.querySelectorAll('#menstruation-chips .chip').forEach(c => {
+      if (selectedMenstruation.includes(c.dataset.v)) c.classList.add('sel');
+    });
+    // Effets secondaires
+    selectedEffects = [...(existing.effects || [])];
+    document.querySelectorAll('#effects-chips .chip').forEach(c => {
+      if (selectedEffects.includes(c.dataset.v)) c.classList.add('sel');
+    });
+    // Note
+    document.getElementById('note-input').value = existing.note || '';
+  } else {
+    document.getElementById('note-input').value = '';
+  }
+}
 
 // Mood buttons
 document.querySelectorAll('.mood-btn').forEach(btn => {
@@ -1365,6 +1559,17 @@ document.querySelectorAll('#symptoms-chips .chip').forEach(c => {
     selectedSymptoms = selectedSymptoms.includes(v)
       ? selectedSymptoms.filter(x => x !== v)
       : [...selectedSymptoms, v];
+  });
+});
+
+// Menstruation chips
+document.querySelectorAll('#menstruation-chips .chip').forEach(c => {
+  c.addEventListener('click', () => {
+    c.classList.toggle('sel');
+    const v = c.dataset.v;
+    selectedMenstruation = selectedMenstruation.includes(v)
+      ? selectedMenstruation.filter(x => x !== v)
+      : [...selectedMenstruation, v];
   });
 });
 
@@ -1404,8 +1609,8 @@ function renderMedChips() {
 
 function saveEntry() {
   if (!selectedMood) { toast('Sélectionnez une humeur', 'var(--danger)'); return; }
-  // Si des traitements sont enregistrés mais aucun n'est coché → confirmation
-  if (meds.length > 0 && selectedMeds.length === 0) {
+  // Aucun traitement coché → confirmation
+  if (selectedMeds.length === 0) {
     document.getElementById('no-meds-modal').classList.add('open');
     return;
   }
@@ -1414,7 +1619,7 @@ function saveEntry() {
 
 function doSaveEntry() {
   document.getElementById('no-meds-modal').classList.remove('open');
-  const today = todayISO();
+  const today = getJournalDate();
   const existing = entries.findIndex(e => e.date === today);
   const entry = {
     date: today,
@@ -1424,6 +1629,7 @@ function doSaveEntry() {
     meds: [...selectedMeds],
     symptoms: [...selectedSymptoms],
     effects: [...selectedEffects],
+    menstruation: [...selectedMenstruation],
     note: document.getElementById('note-input').value.trim(),
     ts: Date.now(),
   };
@@ -1432,7 +1638,10 @@ function doSaveEntry() {
   DB.set('bt_entries', entries);
   markDataChanged();
   toast('Journée enregistrée ✓');
-  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('sel'));
+  // Revenir à aujourd'hui après la sauvegarde
+  journalDateInput.value = todayISO();
+  document.getElementById('journal-title').textContent = 'Journal du jour';
+  document.querySelectorAll('#page-journal .mood-btn').forEach(b => b.classList.remove('sel'));
   selectedMood = 0;
 }
 
@@ -1464,6 +1673,7 @@ function renderHistory() {
       </div>
       ${medNames ? `<div class="entry-meds">${medNames}</div>` : ''}
       ${e.symptoms?.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">🔷 ${e.symptoms.join(', ')}</div>` : ''}
+      ${e.menstruation?.length ? `<div style="font-size:12px;color:#c0527a;margin-top:4px">🩸 ${e.menstruation.map(v => v === 'regles' ? 'Règles' : 'Ovulation').join(', ')}</div>` : ''}
       ${e.effects?.length ? `<div style="font-size:12px;color:var(--warm);margin-top:4px">⚠ ${e.effects.join(', ')}</div>` : ''}
       ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
     </div>`;
@@ -1476,6 +1686,7 @@ let editMood = 0;
 let editMeds = [];
 let editSymptoms = [];
 let editEffects = [];
+let editMenstruation = [];
 
 function openEditModal(date) {
   const entry = entries.find(e => e.date === date);
@@ -1485,6 +1696,7 @@ function openEditModal(date) {
   editMeds = [...(entry.meds || [])];
   editSymptoms = [...(entry.symptoms || [])];
   editEffects = [...(entry.effects || [])];
+  editMenstruation = [...(entry.menstruation || [])];
 
   // Titre
   document.getElementById('edit-modal-title').textContent = 'Modifier — ' + fmt(date);
@@ -1538,6 +1750,16 @@ function openEditModal(date) {
     };
   });
 
+  // Menstruation
+  document.querySelectorAll('#edit-menstruation-chips .chip').forEach(c => {
+    c.classList.toggle('sel', editMenstruation.includes(c.dataset.v));
+    c.onclick = () => {
+      const v = c.dataset.v;
+      if (editMenstruation.includes(v)) { editMenstruation = editMenstruation.filter(x => x !== v); c.classList.remove('sel'); }
+      else { editMenstruation.push(v); c.classList.add('sel'); }
+    };
+  });
+
   // Effets secondaires
   document.querySelectorAll('#edit-effects-chips .chip').forEach(c => {
     c.classList.toggle('sel', editEffects.includes(c.dataset.v));
@@ -1571,6 +1793,7 @@ function saveEditEntry() {
     meds: [...editMeds],
     symptoms: [...editSymptoms],
     effects: [...editEffects],
+    menstruation: [...editMenstruation],
     note: document.getElementById('edit-note-input').value.trim(),
     ts: Date.now(),
   };
@@ -1672,6 +1895,121 @@ function renderStats() {
 
   drawMoodChart(recent);
   drawSleepChart(recent);
+  renderAnnualCalendar();
+}
+
+// ── CALENDRIER ANNUEL ─────────────────────────────────────────────
+let calYear = new Date().getFullYear();
+
+// Retourne 'depression', 'elevated' ou null (neutre)
+function moodPhase(mood) {
+  if (mood <= 4) return 'depression';
+  if (mood >= 7) return 'elevated';
+  return null;
+}
+
+// Calcule les projections de phases à partir de la dernière date de changement
+function computePhaseProjections() {
+  if (!entries.length) return { map: {}, fromDate: null, phase: null };
+
+  const sorted = [...entries]
+    .filter(e => moodPhase(e.mood) !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!sorted.length) return { map: {}, fromDate: null, phase: null };
+
+  // Trouver la dernière date de changement de phase
+  let lastChangeDate = sorted[0].date;
+  let currentPhase   = moodPhase(sorted[0].mood);
+
+  for (let i = 1; i < sorted.length; i++) {
+    const p = moodPhase(sorted[i].mood);
+    if (p && p !== currentPhase) {
+      lastChangeDate = sorted[i].date;
+      currentPhase   = p;
+    }
+  }
+
+  // Projeter 2 ans depuis lastChangeDate par cycles de 21+21 jours
+  const PHASE_DAYS = 21;
+  const projMap = {};
+  const start = new Date(lastChangeDate + 'T00:00:00');
+
+  for (let i = 0; i < PHASE_DAYS * 4 * 2; i++) {   // ~168 jours × 2
+    const cycle = Math.floor(i / PHASE_DAYS) % 2;
+    const phase = cycle === 0 ? currentPhase
+                              : (currentPhase === 'depression' ? 'elevated' : 'depression');
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    projMap[d.toISOString().slice(0, 10)] = phase;
+  }
+
+  return { map: projMap, fromDate: lastChangeDate, phase: currentPhase };
+}
+
+function renderAnnualCalendar() {
+  document.getElementById('cal-year-label').textContent = calYear;
+  const todayStr = todayISO();
+
+  // Index des entrées par date
+  const entryMap = {};
+  entries.forEach(e => { entryMap[e.date] = e; });
+
+  // Projections de phases
+  const { map: projMap, fromDate, phase: projPhase } = computePhaseProjections();
+  const infoEl = document.getElementById('cal-proj-info');
+  if (fromDate) {
+    const phaseLabel = projPhase === 'depression' ? 'dépression' : 'manie';
+    infoEl.textContent = `Simulation calculée depuis le ${fmt(fromDate)} (phase : ${phaseLabel}) · cycles de 21 jours`;
+  } else {
+    infoEl.textContent = 'Pas assez de données pour simuler les phases.';
+  }
+
+  const monthNames = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  let html = '<div class="cal-grid">';
+
+  for (let m = 0; m < 12; m++) {
+    const daysInMonth = new Date(calYear, m + 1, 0).getDate();
+    let firstDow = (new Date(calYear, m, 1).getDay() + 6) % 7;
+
+    html += `<div>
+      <div class="cal-month-name">${monthNames[m]}</div>
+      <div class="cal-week-hdr">
+        <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+      </div>
+      <div class="cal-days">`;
+
+    for (let i = 0; i < firstDow; i++) html += '<div class="cal-day cal-empty"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${calYear}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const entry = entryMap[ds];
+      let cls = 'cal-day';
+      let icon = '';
+
+      if (entry) {
+        // Jour enregistré → couleur réelle
+        if      (entry.mood <= 4) cls += ' cal-depress';
+        else if (entry.mood <= 6) cls += ' cal-neutral';
+        else                      cls += ' cal-manic';
+
+        if      (entry.menstruation?.includes('regles'))    icon = '🩸';
+        else if (entry.menstruation?.includes('ovulation')) icon = '🌸';
+      } else if (projMap[ds]) {
+        // Jour sans entrée → hachures de simulation
+        cls += projMap[ds] === 'depression' ? ' cal-proj-depress' : ' cal-proj-elevated';
+      }
+
+      if (ds === todayStr) cls += ' cal-today';
+
+      html += `<div class="${cls}">${icon}</div>`;
+    }
+
+    html += '</div></div>';
+  }
+
+  html += '</div>';
+  document.getElementById('annual-calendar').innerHTML = html;
 }
 
 function drawMoodChart(data) {
