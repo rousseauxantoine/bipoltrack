@@ -320,6 +320,18 @@ canvas { width: 100% !important; }
 }
 .doc-callout.warn { background: rgba(242,68,5,0.08); border-left-color: var(--warm); }
 
+/* ── EDIT ENTRY BUTTON ── */
+.entry-edit-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 10px; padding: 6px 14px;
+  background: rgba(242,116,5,0.08); border: 1.5px solid rgba(242,116,5,0.25);
+  border-radius: 20px; font-size: 12px; font-weight: 600;
+  color: var(--accent); cursor: pointer; font-family: 'DM Sans', sans-serif;
+  transition: all 0.15s;
+}
+.entry-edit-btn:hover { background: rgba(242,116,5,0.15); border-color: var(--accent); }
+.entry-edit-btn svg { width: 13px; height: 13px; }
+
 /* ── EMPTY STATE ── */
 .empty {
   text-align: center; padding: 48px 20px; color: var(--muted);
@@ -892,6 +904,86 @@ canvas { width: 100% !important; }
   </div>
 </div>
 
+<!-- MODAL ÉDITION ENTRÉE -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="edit-modal-title">Modifier l'entrée</div>
+
+    <div class="card-label">Humeur générale</div>
+    <div class="mood-scale" id="edit-mood-scale">
+      <button class="mood-btn" data-v="1"><span class="score">1</span><span class="label">Déprimé</span></button>
+      <button class="mood-btn" data-v="2"><span class="score">2</span></button>
+      <button class="mood-btn" data-v="3"><span class="score">3</span></button>
+      <button class="mood-btn" data-v="4"><span class="score">4</span></button>
+      <button class="mood-btn" data-v="5"><span class="score">5</span><span class="label">Neutre</span></button>
+      <button class="mood-btn" data-v="6"><span class="score">6</span></button>
+      <button class="mood-btn" data-v="7"><span class="score">7</span></button>
+      <button class="mood-btn" data-v="8"><span class="score">8</span></button>
+      <button class="mood-btn" data-v="9"><span class="score">9</span></button>
+      <button class="mood-btn" data-v="10"><span class="score">10</span><span class="label">Manie</span></button>
+    </div>
+
+    <div class="field" style="margin-top:16px">
+      <label>Sommeil (heures)</label>
+      <div class="slider-wrap">
+        <input type="range" id="edit-sleep-slider" min="0" max="12" step="0.5" value="7">
+        <div class="slider-labels"><span>0h</span><span id="edit-sleep-val">7h</span><span>12h</span></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Anxiété</label>
+      <div class="slider-wrap">
+        <input type="range" id="edit-anxiety-slider" min="0" max="10" step="1" value="0">
+        <div class="slider-labels"><span>Aucune</span><span id="edit-anxiety-val">0/10</span><span>Intense</span></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Traitements pris</label>
+      <div class="chips" id="edit-meds-chips"></div>
+    </div>
+
+    <div class="field">
+      <label>Symptômes notables</label>
+      <div class="chips" id="edit-symptoms-chips">
+        <button class="chip" data-v="agitation">Agitation</button>
+        <button class="chip" data-v="fatigue">Fatigue</button>
+        <button class="chip" data-v="irritabilite">Irritabilité</button>
+        <button class="chip" data-v="idees_rapides">Idées rapides</button>
+        <button class="chip" data-v="concentration">Difficulté à se concentrer</button>
+        <button class="chip" data-v="isolement">Retrait social</button>
+        <button class="chip" data-v="impulsivite">Impulsivité</button>
+        <button class="chip" data-v="pleurs">Pleurs</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Effets secondaires</label>
+      <div class="chips" id="edit-effects-chips">
+        <button class="chip" data-v="nausee">Nausée</button>
+        <button class="chip" data-v="tremblements">Tremblements</button>
+        <button class="chip" data-v="sedation">Sédation</button>
+        <button class="chip" data-v="prise_poids">Prise de poids</button>
+        <button class="chip" data-v="secheresse">Bouche sèche</button>
+        <button class="chip" data-v="insomnie">Insomnie</button>
+        <button class="chip" data-v="vision">Troubles vision</button>
+        <button class="chip" data-v="libido">Baisse libido</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Note libre</label>
+      <textarea id="edit-note-input" style="height:80px" placeholder="Observations, ressenti…"></textarea>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveEditEntry()" style="margin-bottom:10px">Enregistrer les modifications</button>
+    <button class="btn btn-secondary" onclick="closeEditModal()" style="margin-bottom:10px">Annuler</button>
+    <button class="btn btn-danger" onclick="deleteEntry()">Supprimer cette entrée</button>
+  </div>
+</div>
+
 <!-- MODAL DOCUMENTATION FORMAT JSON -->
 <div class="modal-overlay" id="doc-modal">
   <div class="modal">
@@ -1349,8 +1441,133 @@ function renderHistory() {
       ${e.symptoms?.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">🔷 ${e.symptoms.join(', ')}</div>` : ''}
       ${e.effects?.length ? `<div style="font-size:12px;color:var(--warm);margin-top:4px">⚠ ${e.effects.join(', ')}</div>` : ''}
       ${e.note ? `<div class="entry-note">${e.note}</div>` : ''}
+      <button class="entry-edit-btn" onclick="openEditModal('${e.date}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Modifier
+      </button>
     </div>`;
   }).join('');
+}
+
+// ── ÉDITION ENTRÉE ────────────────────────────────────────────────
+let editingDate = null;
+let editMood = 0;
+let editMeds = [];
+let editSymptoms = [];
+let editEffects = [];
+
+function openEditModal(date) {
+  const entry = entries.find(e => e.date === date);
+  if (!entry) return;
+  editingDate = date;
+  editMood = entry.mood;
+  editMeds = [...(entry.meds || [])];
+  editSymptoms = [...(entry.symptoms || [])];
+  editEffects = [...(entry.effects || [])];
+
+  // Titre
+  document.getElementById('edit-modal-title').textContent = 'Modifier — ' + fmt(date);
+
+  // Humeur
+  document.querySelectorAll('#edit-mood-scale .mood-btn').forEach(b => {
+    b.classList.toggle('sel', +b.dataset.v === editMood);
+    b.onclick = () => {
+      editMood = +b.dataset.v;
+      document.querySelectorAll('#edit-mood-scale .mood-btn').forEach(x => x.classList.remove('sel'));
+      b.classList.add('sel');
+    };
+  });
+
+  // Sommeil
+  const sleepSlider = document.getElementById('edit-sleep-slider');
+  sleepSlider.value = entry.sleep ?? 7;
+  document.getElementById('edit-sleep-val').textContent = sleepSlider.value + 'h';
+  sleepSlider.oninput = () => document.getElementById('edit-sleep-val').textContent = sleepSlider.value + 'h';
+
+  // Anxiété
+  const anxSlider = document.getElementById('edit-anxiety-slider');
+  anxSlider.value = entry.anxiety ?? 0;
+  document.getElementById('edit-anxiety-val').textContent = anxSlider.value + '/10';
+  anxSlider.oninput = () => document.getElementById('edit-anxiety-val').textContent = anxSlider.value + '/10';
+
+  // Médicaments
+  const medsChips = document.getElementById('edit-meds-chips');
+  if (!meds.length) {
+    medsChips.innerHTML = '<p style="font-size:13px;color:var(--muted)">Aucun traitement enregistré.</p>';
+  } else {
+    medsChips.innerHTML = meds.map(m =>
+      `<button class="chip${editMeds.includes(m.id) ? ' sel' : ''}" data-id="${m.id}">${m.name}</button>`
+    ).join('');
+    medsChips.querySelectorAll('.chip').forEach(c => {
+      c.onclick = () => {
+        const id = c.dataset.id;
+        if (editMeds.includes(id)) { editMeds = editMeds.filter(x => x !== id); c.classList.remove('sel'); }
+        else { editMeds.push(id); c.classList.add('sel'); }
+      };
+    });
+  }
+
+  // Symptômes
+  document.querySelectorAll('#edit-symptoms-chips .chip').forEach(c => {
+    c.classList.toggle('sel', editSymptoms.includes(c.dataset.v));
+    c.onclick = () => {
+      const v = c.dataset.v;
+      if (editSymptoms.includes(v)) { editSymptoms = editSymptoms.filter(x => x !== v); c.classList.remove('sel'); }
+      else { editSymptoms.push(v); c.classList.add('sel'); }
+    };
+  });
+
+  // Effets secondaires
+  document.querySelectorAll('#edit-effects-chips .chip').forEach(c => {
+    c.classList.toggle('sel', editEffects.includes(c.dataset.v));
+    c.onclick = () => {
+      const v = c.dataset.v;
+      if (editEffects.includes(v)) { editEffects = editEffects.filter(x => x !== v); c.classList.remove('sel'); }
+      else { editEffects.push(v); c.classList.add('sel'); }
+    };
+  });
+
+  // Note
+  document.getElementById('edit-note-input').value = entry.note || '';
+
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editingDate = null;
+}
+
+function saveEditEntry() {
+  if (!editMood) { toast('Sélectionnez une humeur', 'var(--danger)'); return; }
+  const idx = entries.findIndex(e => e.date === editingDate);
+  if (idx < 0) return;
+  entries[idx] = {
+    ...entries[idx],
+    mood: editMood,
+    sleep: +document.getElementById('edit-sleep-slider').value,
+    anxiety: +document.getElementById('edit-anxiety-slider').value,
+    meds: [...editMeds],
+    symptoms: [...editSymptoms],
+    effects: [...editEffects],
+    note: document.getElementById('edit-note-input').value.trim(),
+    ts: Date.now(),
+  };
+  DB.set('bt_entries', entries);
+  markDataChanged();
+  closeEditModal();
+  renderHistory();
+  toast('Entrée modifiée ✓');
+}
+
+function deleteEntry() {
+  if (!confirm('Supprimer définitivement cette entrée ?')) return;
+  entries = entries.filter(e => e.date !== editingDate);
+  DB.set('bt_entries', entries);
+  markDataChanged();
+  closeEditModal();
+  renderHistory();
+  toast('Entrée supprimée');
 }
 
 // ── TRAITEMENTS ───────────────────────────────────────────────────
