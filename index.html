@@ -985,8 +985,13 @@ canvas { width: 100% !important; }
         <input type="text" id="med-dose" placeholder="500 mg">
       </div>
       <div class="field">
-        <label>Fréquence</label>
-        <select id="med-freq">
+        <label>Quantité</label>
+        <input type="text" id="med-qty" placeholder="ex : 2 cp">
+      </div>
+    </div>
+    <div class="field">
+      <label>Fréquence</label>
+      <select id="med-freq">
           <option value="1x/jour">1x/jour</option>
           <option value="2x/jour">2x/jour</option>
           <option value="3x/jour">3x/jour</option>
@@ -1614,7 +1619,7 @@ function renderMedChips() {
   meds.filter(m => m.active !== false).forEach(m => {
     const c = document.createElement('button');
     c.className = 'chip';
-    c.textContent = m.name + (m.dose ? ' ' + m.dose : '');
+    c.textContent = m.name + (m.dose ? ' ' + m.dose : '') + (m.qty ? ' · ' + m.qty : '');
     c.dataset.id = m.id;
     c.addEventListener('click', () => {
       c.classList.toggle('sel');
@@ -1848,6 +1853,7 @@ function saveMed() {
     id: Date.now().toString(),
     name,
     dose: document.getElementById('med-dose').value.trim(),
+    qty: document.getElementById('med-qty').value.trim(),
     freq: document.getElementById('med-freq').value,
     start: document.getElementById('med-start').value,
     notes: document.getElementById('med-notes').value.trim(),
@@ -1862,6 +1868,7 @@ function saveMed() {
   toast('Traitement ajouté ✓');
   document.getElementById('med-name').value = '';
   document.getElementById('med-dose').value = '';
+  document.getElementById('med-qty').value = '';
   document.getElementById('med-notes').value = '';
 }
 
@@ -1883,7 +1890,7 @@ function renderMeds() {
   list.innerHTML = meds.map(m => `
     <div class="med-item">
       <div class="med-info">
-        <h3>${m.name} ${m.dose ? '<span style="color:var(--muted);font-weight:400">'+m.dose+'</span>' : ''}</h3>
+        <h3>${m.name} ${m.dose ? '<span style="color:var(--muted);font-weight:400">'+m.dose+'</span>' : ''}${m.qty ? '<span style="color:var(--muted);font-weight:400;font-size:12px"> · '+m.qty+'</span>' : ''}</h3>
         <p>${m.freq} · Depuis le ${fmt(m.start)}</p>
         ${m.notes ? `<p style="margin-top:3px;font-size:11px;color:var(--muted)">${m.notes}</p>` : ''}
       </div>
@@ -1932,39 +1939,53 @@ function moodPhase(mood) {
 function computePhaseProjections() {
   if (!entries.length) return { map: {}, fromDate: null, phase: null };
 
+  // Entrées avec une phase connue (non neutre), triées chronologiquement
   const sorted = [...entries]
     .filter(e => moodPhase(e.mood) !== null)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (!sorted.length) return { map: {}, fromDate: null, phase: null };
 
-  // Trouver la dernière date de changement de phase
-  let lastChangeDate = sorted[0].date;
-  let currentPhase   = moodPhase(sorted[0].mood);
+  const simMap = {};
+  const todayStr = todayISO();
+  const PHASE_DAYS = 21;
 
-  for (let i = 1; i < sorted.length; i++) {
-    const p = moodPhase(sorted[i].mood);
-    if (p && p !== currentPhase) {
-      lastChangeDate = sorted[i].date;
-      currentPhase   = p;
+  // === PASSÉ : remplir les jours sans saisie entre entrées connues ===
+  // Pour chaque entrée de phase, on "continue" cette phase jusqu'à la prochaine
+  // entrée de phase connue. Ces jours sans données apparaîtront en hachures.
+  for (let i = 0; i < sorted.length; i++) {
+    const phase = moodPhase(sorted[i].mood);
+    const start = new Date(sorted[i].date + 'T00:00:00');
+    // Aller jusqu'à la date de la prochaine entrée (ou aujourd'hui pour la dernière)
+    const nextDateStr = i < sorted.length - 1 ? sorted[i + 1].date : todayStr;
+    const end = new Date(nextDateStr + 'T00:00:00');
+
+    const d = new Date(start);
+    while (d < end) {
+      simMap[d.toISOString().slice(0, 10)] = phase;
+      d.setDate(d.getDate() + 1);
     }
   }
 
-  // Projeter 2 ans depuis lastChangeDate par cycles de 21+21 jours
-  const PHASE_DAYS = 21;
-  const projMap = {};
-  const start = new Date(lastChangeDate + 'T00:00:00');
+  // === FUTUR : cycles alternés de 21 jours depuis la dernière entrée de phase ===
+  const lastEntry  = sorted[sorted.length - 1];
+  const lastPhase  = moodPhase(lastEntry.mood);
+  const lastDate   = new Date(lastEntry.date + 'T00:00:00');
+  const todayDate  = new Date(todayStr + 'T00:00:00');
+  const daysSinceLast = Math.round((todayDate - lastDate) / 86400000);
 
-  for (let i = 0; i < PHASE_DAYS * 4 * 2; i++) {   // ~168 jours × 2
-    const cycle = Math.floor(i / PHASE_DAYS) % 2;
-    const phase = cycle === 0 ? currentPhase
-                              : (currentPhase === 'depression' ? 'elevated' : 'depression');
-    const d = new Date(start);
+  for (let i = 1; i <= PHASE_DAYS * 8; i++) {   // ~168 jours en avance
+    const totalDays = daysSinceLast + i;
+    const cycle = Math.floor(totalDays / PHASE_DAYS) % 2;
+    const phase = cycle === 0
+      ? lastPhase
+      : (lastPhase === 'depression' ? 'elevated' : 'depression');
+    const d = new Date(todayDate);
     d.setDate(d.getDate() + i);
-    projMap[d.toISOString().slice(0, 10)] = phase;
+    simMap[d.toISOString().slice(0, 10)] = phase;
   }
 
-  return { map: projMap, fromDate: lastChangeDate, phase: currentPhase };
+  return { map: simMap, fromDate: lastEntry.date, phase: lastPhase };
 }
 
 function renderAnnualCalendar() {
