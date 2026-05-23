@@ -2509,12 +2509,14 @@ function downloadSampleJSON() {
   toast('Fichier exemple téléchargé ✓');
 }
 
-// ── NEWS (RSS) ────────────────────────────────────────────────────
+// ── NEWS (RSS + Scraping) ─────────────────────────────────────────
 const NEWS_CACHE_KEY     = 'bt_news_cache';      // { date, articles, feedsCount }
-const NEWS_FEEDS_FILE    = 'base-rss.md';        // fichier des flux RSS
-const NEWS_MAX_PER_FEED  = 3;                    // articles max par flux
+const NEWS_FEEDS_FILE    = 'base-rss.md';        // flux RSS natifs
+const NEWS_SCRAPE_FILE   = 'sites_information.md'; // sites sans flux RSS
+const NEWS_MAX_PER_FEED  = 3;                    // articles max par source
 const NEWS_PAGE_SIZE     = 10;                   // articles visibles avant "Plus d'articles"
 const NEWS_RSS_PROXY     = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const NEWS_SCRAPE_PROXY  = 'https://api.allorigins.win/get?url=';
 
 // Charge la liste des URLs depuis base-rss.md (ignore lignes vides et commentaires)
 async function loadRssUrls() {
@@ -2575,6 +2577,102 @@ function formatArticleDate(d) {
   const dt = new Date(d);
   if (isNaN(dt)) return '';
   return dt.toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+// Parse une date en français ("26 mai 2026", "Publié le 26 mai 2026")
+function parseFrDate(text) {
+  if (!text) return '';
+  const months = {
+    'janvier':0,'février':1,'mars':2,'avril':3,'mai':4,'juin':5,
+    'juillet':6,'août':7,'septembre':8,'octobre':9,'novembre':10,'décembre':11
+  };
+  const m = text.match(/(\d{1,2})\s+([a-zéûô]+)\s+(\d{4})/i);
+  if (!m) return '';
+  const month = months[m[2].toLowerCase()];
+  if (month === undefined) return '';
+  return new Date(+m[3], month, +m[1]).toISOString();
+}
+
+// Charge la liste des URLs depuis sites_information.md
+async function loadScrapeUrls() {
+  try {
+    const resp = await fetch(NEWS_SCRAPE_FILE, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    if (/<!doctype html|<html[\s>]/i.test(text)) {
+      throw new Error('sites_information.md indisponible (mode hors-ligne ?)');
+    }
+    return text.split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'))
+      .filter(l => /^https?:\/\/\S+$/i.test(l));
+  } catch (e) {
+    console.warn('Lecture sites_information.md échouée:', e);
+    return [];
+  }
+}
+
+// Scrape une page HTML et retourne des items au même format que fetchOneFeed
+async function scrapeOneSite(pageUrl) {
+  try {
+    const resp = await fetch(NEWS_SCRAPE_PROXY + encodeURIComponent(pageUrl));
+    if (!resp.ok) throw new Error('Proxy HTTP ' + resp.status);
+    const data = await resp.json();
+    const html = data.contents;
+    if (!html) throw new Error('Contenu vide');
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const base = new URL(pageUrl);
+    const metaSite = doc.querySelector('meta[property="og:site_name"]');
+    const sourceName = (metaSite && metaSite.getAttribute('content'))
+      || base.hostname.replace(/^www\./, '');
+
+    const items = [];
+    const seen = new Set();
+    // Cherche les liens dans les balises de titre (h2, h3, h4)
+    const anchors = [...doc.querySelectorAll('h2 a, h3 a, h4 a')];
+
+    for (const a of anchors) {
+      if (items.length >= NEWS_MAX_PER_FEED) break;
+      const href = a.getAttribute('href');
+      if (!href || href === '#') continue;
+      const link = href.startsWith('http')
+        ? href
+        : base.origin + (href.startsWith('/') ? '' : '/') + href;
+      if (seen.has(link)) continue;
+      seen.add(link);
+      const title = a.textContent.trim().replace(/\s+/g, ' ');
+      if (!title || title.length < 8) continue;
+
+      // Cherche date et description dans le conteneur parent le plus proche
+      const container = a.closest('article, li, .item, .card, .node, .view-row')
+        || a.parentElement?.parentElement?.parentElement
+        || a.parentElement;
+
+      let pubDate = '';
+      let description = '';
+      if (container) {
+        const timeEl = container.querySelector('time');
+        if (timeEl) {
+          pubDate = timeEl.getAttribute('datetime') || parseFrDate(timeEl.textContent);
+        } else {
+          pubDate = parseFrDate(container.textContent);
+        }
+        const descEl = container.querySelector('p, .summary, .description, .field--name-body');
+        if (descEl) {
+          const txt = descEl.textContent.trim().replace(/\s+/g, ' ');
+          if (txt !== title) description = txt.slice(0, 300);
+        }
+      }
+      items.push({ source: sourceName, title, link, pubDate, description, scraped: true });
+    }
+
+    if (!items.length) throw new Error('Aucun article détecté sur la page');
+    return { ok: true, source: sourceName, url: pageUrl, items, scraped: true };
+  } catch (e) {
+    return { ok: false, source: pageUrl, url: pageUrl, error: e.message || String(e), items: [], scraped: true };
+  }
 }
 
 // Rendu HTML des articles (count = nb d'articles visibles)
@@ -2646,26 +2744,31 @@ async function renderNews(forceRefresh = false) {
   container.innerHTML = `
     <div class="news-loading">
       <div class="news-spinner"></div>
-      Lecture des flux RSS…
+      Lecture des flux RSS et des sites…
     </div>`;
 
-  // 1) Lire la liste des flux
-  const urls = await loadRssUrls();
-  if (!urls.length) {
+  // 1) Lire les deux listes de sources en parallèle
+  const [rssUrls, scrapeUrls] = await Promise.all([loadRssUrls(), loadScrapeUrls()]);
+
+  if (!rssUrls.length && !scrapeUrls.length) {
     container.innerHTML = `<div class="news-error">
-      Aucun flux RSS trouvé dans <code>base-rss.md</code>.
-      Ajoutez une URL par ligne dans ce fichier, puis rafraîchissez.
+      Aucune source configurée dans <code>base-rss.md</code> ni dans <code>sites_information.md</code>.
     </div>`;
     return;
   }
 
-  // 2) Récupérer tous les flux en parallèle
-  const feeds = await Promise.all(urls.map(fetchOneFeed));
-  const articles = feeds.flatMap(f => f.items);
-  // Tri par date desc
+  // 2) Récupérer flux RSS et scraper les sites en parallèle
+  const [feeds, scrapes] = await Promise.all([
+    Promise.all(rssUrls.map(fetchOneFeed)),
+    Promise.all(scrapeUrls.map(scrapeOneSite)),
+  ]);
+
+  const allSources = [...feeds, ...scrapes];
+  const articles = allSources.flatMap(f => f.items);
+  // Tri par date desc (articles sans date tombent en bas)
   articles.sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
 
-  const feedErrorsHtml = renderFeedErrorsHtml(feeds);
+  const feedErrorsHtml = renderFeedErrorsHtml(allSources);
 
   if (!articles.length) {
     container.innerHTML = feedErrorsHtml + `<div class="empty"><p>Aucun article récupéré.</p></div>`;
@@ -2673,7 +2776,7 @@ async function renderNews(forceRefresh = false) {
   }
 
   // 3) Cache et affichage final
-  const cache = { date: today, articles, feedsCount: urls.length };
+  const cache = { date: today, articles, feedsCount: allSources.length };
   DB.set(NEWS_CACHE_KEY, cache);
   renderNewsContent(cache, feedErrorsHtml);
 }
