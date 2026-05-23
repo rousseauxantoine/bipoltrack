@@ -177,7 +177,7 @@ function ArgilePhaseHeader({ phase, total = 3, date = 'Sam. 23 mai' }) {
 }
 
 // ───── Journal · phase 1 — Humeur ─────
-function ArgileJournalMood({ orbFinish = 'lisse' }) {
+function ArgileJournalMood({ orbFinish = 'lisse', onNext }) {
   const [v, setV] = useStateA(58);
   const zone = argileZoneOf(v);
   return (
@@ -204,7 +204,7 @@ function ArgileJournalMood({ orbFinish = 'lisse' }) {
           </div>
         </div>
 
-        <button style={{
+        <button onClick={onNext} style={{
           width: '100%', marginTop: 28, padding: '16px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
@@ -284,7 +284,7 @@ function ArgileChips({ items, selected, onToggle }) {
   );
 }
 
-function ArgileJournalCorps() {
+function ArgileJournalCorps({ onNext }) {
   const [sleep, setSleep] = useStateA(7);
   const [anx, setAnx] = useStateA(3);
   const [sym, setSym] = useStateA(['fatigue']);
@@ -319,7 +319,7 @@ function ArgileJournalCorps() {
           />
         </div>
 
-        <button style={{
+        <button onClick={onNext} style={{
           width: '100%', marginTop: 32, padding: '16px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
@@ -335,7 +335,7 @@ function ArgileJournalCorps() {
 }
 
 // ───── Journal · phase 3 — Mot ─────
-function ArgileJournalMot() {
+function ArgileJournalMot({ onNext }) {
   const [meds, setMeds] = useStateA(['lith', 'depak']);
   const toggle = (id) => setMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   const [note, setNote] = useStateA("Bonne matinée. L'après-midi a glissé. J'ai marché 30min avec Léa, ça m'a sortie de ma tête.");
@@ -394,7 +394,7 @@ function ArgileJournalMot() {
           }} />
         </div>
 
-        <button style={{
+        <button onClick={onNext} style={{
           width: '100%', marginTop: 18, padding: '18px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 20, cursor: 'pointer',
@@ -581,9 +581,9 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const finish = tweaks.finish || 'lisse';
 
   let body;
-  if (screen === 'journal')      body = <ArgileJournalMood orbFinish={finish} />;
-  else if (screen === 'corps')   body = <ArgileJournalCorps />;
-  else if (screen === 'mot')     body = <ArgileJournalMot />;
+  if (screen === 'journal')      body = <ArgileJournalMood orbFinish={finish} onNext={() => setScreen('corps')} />;
+  else if (screen === 'corps')   body = <ArgileJournalCorps onNext={() => setScreen('mot')} />;
+  else if (screen === 'mot')     body = <ArgileJournalMot onNext={() => setScreen('done')} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
   else if (screen === 'empty'   && window.ArgileEmpty)   body = <ArgileEmpty onStart={() => setScreen('journal')} />;
