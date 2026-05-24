@@ -167,7 +167,7 @@ function ArgileShell({ children, active, onNav, hideHeader = false }) {
           {syncLabel}
         </div>
       )}
-      <div style={{ height: '100%', overflowY: 'auto', paddingTop: 54, paddingBottom: 100 }}>
+      <div style={{ height: '100%', overflowY: 'auto', paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)', paddingBottom: 'calc(100px + env(safe-area-inset-bottom, 0px))' }}>
         {children}
       </div>
       {/* bottom nav */}
@@ -688,7 +688,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   else active = 'journal';
 
   return (
-    <IOSDevice width={390} height={844}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       <ArgileShell active={active} onNav={(t) => {
         if (t === 'journal') setScreen('journal');
         else if (t === 'stats') setScreen('stats-deep');
@@ -787,7 +787,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
           </div>
         </div>
       )}
-    </IOSDevice>
+    </div>
   );
 }
 
