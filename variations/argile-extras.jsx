@@ -766,8 +766,10 @@ function ArgileSettings() {
   const [patientDoctor, setPatientDoctor] = useStateAx(LS.get('bt_patient_doctor'));
   const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
   const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
-  const [exportFeedback, setExportFeedback] = useStateAx('');
-  const [syncMessage,    setSyncMessage]   = useStateAx('');
+  const [exportFeedback,  setExportFeedback]  = useStateAx('');
+  const [syncMessage,     setSyncMessage]    = useStateAx('');
+  const [backupFeedback,  setBackupFeedback] = useStateAx('');
+  const [syncFeedback,    setSyncFeedback]   = useStateAx('');
 
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
 
@@ -816,10 +818,124 @@ function ArgileSettings() {
     setTimeout(() => setExportFeedback(''), 2000);
   };
 
+  // ── Google Drive — OAuth token (flux implicite, popup) ──────────────
+  const getGoogleToken = () => new Promise((resolve, reject) => {
+    const cached = sessionStorage.getItem('bt_google_token');
+    const expiry  = sessionStorage.getItem('bt_google_token_expiry');
+    if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
+    if (!driveId) { reject(new Error('Client ID manquant')); return; }
+
+    const scope    = 'https://www.googleapis.com/auth/drive.file';
+    const base     = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+    const authUrl  = `https://accounts.google.com/o/oauth2/v2/auth`
+      + `?client_id=${encodeURIComponent(driveId)}`
+      + `&redirect_uri=${encodeURIComponent(base)}`
+      + `&response_type=token`
+      + `&scope=${encodeURIComponent(scope)}`;
+
+    const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
+    if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
+
+    const timer = setInterval(() => {
+      try {
+        if (popup.closed) { clearInterval(timer); reject(new Error('Fenêtre fermée')); return; }
+        const hash = popup.location.hash;
+        if (hash && hash.includes('access_token')) {
+          clearInterval(timer); popup.close();
+          const p   = new URLSearchParams(hash.slice(1));
+          const tok = p.get('access_token');
+          const exp = +(p.get('expires_in') || 3600);
+          sessionStorage.setItem('bt_google_token', tok);
+          sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
+          resolve(tok);
+        }
+      } catch (_) { /* cross-origin : en attente */ }
+    }, 400);
+  });
+
+  // ── Sauvegarder vers Drive ─────────────────────────────────────────
+  const saveNow = async () => {
+    setBackupFeedback('en cours…');
+    try {
+      const token   = await getGoogleToken();
+      const payload = JSON.stringify({
+        app: 'BipolTrack', version: 2, exportedAt: new Date().toISOString(),
+        entries:       LS.getJSON('bt_entries', []),
+        meds:          LS.getJSON('bt_meds',    []),
+        patientName:   LS.get('bt_patient_name'),
+        patientDob:    LS.get('bt_patient_dob'),
+        patientDoctor: LS.get('bt_patient_doctor'),
+      }, null, 2);
+
+      const filename = 'bipoltrack-backup.json';
+      const search   = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='${filename}'+and+trashed=false`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json());
+      const fileId = search.files?.[0]?.id;
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/json' })], { type: 'application/json' }));
+      form.append('file',     new Blob([payload], { type: 'application/json' }));
+
+      const res = await fetch(
+        fileId
+          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,
+        { method: fileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+      );
+      if (!res.ok) throw new Error(`Drive ${res.status}`);
+
+      LS.set('bt_last_synced', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+      setBackupFeedback('sauvegardé ✓');
+    } catch (e) {
+      setBackupFeedback('erreur : ' + e.message);
+    }
+    setTimeout(() => setBackupFeedback(''), 4000);
+  };
+
+  // ── Synchroniser depuis Drive ──────────────────────────────────────
+  const syncFromDrive = async () => {
+    setSyncFeedback('chargement…');
+    try {
+      const token  = await getGoogleToken();
+      const search = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='bipoltrack-backup.json'+and+trashed=false`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json());
+      const fileId = search.files?.[0]?.id;
+      if (!fileId) { setSyncFeedback('aucune sauvegarde trouvée'); setTimeout(() => setSyncFeedback(''), 4000); return; }
+
+      const file = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json());
+
+      if (file.entries)       LS.setJSON('bt_entries', file.entries);
+      if (file.meds)          LS.setJSON('bt_meds',    file.meds);
+      if (file.patientName)   LS.set('bt_patient_name',   file.patientName);
+      if (file.patientDob)    LS.set('bt_patient_dob',    file.patientDob);
+      if (file.patientDoctor) LS.set('bt_patient_doctor', file.patientDoctor);
+
+      LS.set('bt_last_synced', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+      setSyncFeedback('synchronisé ✓');
+    } catch (e) {
+      setSyncFeedback('erreur : ' + e.message);
+    }
+    setTimeout(() => setSyncFeedback(''), 4000);
+  };
+
   const lastSynced = LS.get('bt_last_synced');
-  const driveStatus = driveId
-    ? `ID configuré · ${lastSynced ? 'synchro ' + new Date(+lastSynced).toLocaleDateString('fr-FR') : 'jamais synchronisé'}`
-    : 'Non configuré';
+  const driveSyncLabel = lastSynced
+    ? (() => {
+        const d = new Date(+lastSynced);
+        return 'synchro ' + d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+          + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      })()
+    : 'jamais synchronisé';
+  const driveStatus = driveId ? `ID configuré · ${driveSyncLabel}` : 'Non configuré';
 
   return (
     <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 80 }}>
@@ -844,9 +960,17 @@ function ArgileSettings() {
         <ArgileEditRow icon="↥" title="Google Drive" value={driveStatus}
           placeholder="Client ID Google OAuth"
           onSave={saveDriveId} />
+        {driveId && (
+          <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
+            value="Envoie les données vers Drive"
+            trailing={backupFeedback || 'sauvegarder →'}
+            onTrailing={backupFeedback ? undefined : saveNow} />
+        )}
         <ArgileSettingsRow icon="↻" title="Synchronisation auto"
           value={syncAuto ? 'Active' : 'Inactive'}
-          toggle toggleValue={syncAuto} onToggle={toggleSync} />
+          toggle toggleValue={syncAuto} onToggle={toggleSync}
+          trailing={driveId ? (syncFeedback || 'syncer →') : undefined}
+          onTrailing={driveId && !syncFeedback ? syncFromDrive : undefined} />
         <ArgileSettingsRow icon="⤓" title="Exporter en JSON" value="Sauvegarde complète"
           trailing={exportFeedback === 'json' ? 'exporté ✓' : 'exporter →'}
           onTrailing={exportJSON} />
