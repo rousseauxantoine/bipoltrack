@@ -157,6 +157,74 @@ function ArgileNews() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// SIMULATION DES PHASES — algorithme V1 adapté à l'échelle 0-100
+// ══════════════════════════════════════════════════════════════════════
+const PHASE_DAYS_ARGILE = 21;
+
+function moodPhaseArgile(mood) {
+  if (mood == null) return null;
+  if (mood < 40)  return 'down';
+  if (mood >= 60) return 'up';
+  return null;
+}
+
+function computePhaseProjectionsArgile(entries) {
+  if (!entries.length) return { map: {}, fromDate: null, phase: null };
+
+  const sorted = [...entries]
+    .filter(e => moodPhaseArgile(e.mood) !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!sorted.length) return { map: {}, fromDate: null, phase: null };
+
+  const simMap    = {};
+  const todayStr  = new Date().toISOString().slice(0, 10);
+
+  // Comblement du passé : prolonge chaque phase jusqu'à la prochaine entrée connue
+  for (let i = 0; i < sorted.length; i++) {
+    const phase       = moodPhaseArgile(sorted[i].mood);
+    const start       = new Date(sorted[i].date + 'T00:00:00');
+    const nextDateStr = i < sorted.length - 1 ? sorted[i + 1].date : todayStr;
+    const end         = new Date(nextDateStr + 'T00:00:00');
+    const d = new Date(start);
+    while (d < end) {
+      simMap[d.toISOString().slice(0, 10)] = phase;
+      d.setDate(d.getDate() + 1);
+    }
+  }
+
+  // Dernier basculement de phase (ancre temporelle)
+  let lastChangeDate = sorted[0].date;
+  let currentPhase   = moodPhaseArgile(sorted[0].mood);
+  for (let i = 1; i < sorted.length; i++) {
+    const p = moodPhaseArgile(sorted[i].mood);
+    if (p !== currentPhase) { lastChangeDate = sorted[i].date; currentPhase = p; }
+  }
+
+  // Projection future — 168 jours (8 cycles de 21 j)
+  const todayDate       = new Date(todayStr + 'T00:00:00');
+  const changeDate      = new Date(lastChangeDate + 'T00:00:00');
+  const daysSinceChange = Math.round((todayDate - changeDate) / 86400000);
+
+  for (let i = 1; i <= PHASE_DAYS_ARGILE * 8; i++) {
+    const totalDays = daysSinceChange + i;
+    const cycle     = Math.floor(totalDays / PHASE_DAYS_ARGILE) % 2;
+    const phase     = cycle === 0 ? currentPhase : (currentPhase === 'down' ? 'up' : 'down');
+    const d = new Date(todayDate);
+    d.setDate(d.getDate() + i);
+    simMap[d.toISOString().slice(0, 10)] = phase;
+  }
+
+  return { map: simMap, fromDate: lastChangeDate, phase: currentPhase };
+}
+
+function fmtDateFR(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const mois = ['janv','févr','mars','avr','mai','juin','juil','août','sept','oct','nov','déc'];
+  return `${d.getDate()} ${mois[d.getMonth()]}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // STATS DEEP — calendrier annuel + graphes (données réelles)
 // ══════════════════════════════════════════════════════════════════════
 function ArgileStatsDeep() {
@@ -236,6 +304,12 @@ function ArgileStatsDeep() {
 
   // 30 dernières entrées pour sparkline
   const last30 = useMemoAx(() => allEntries.slice(-30), [allEntries]);
+
+  // Simulation des phases (V1 adaptée échelle 0-100)
+  const { map: projMap, fromDate: projFromDate, phase: projPhase } = useMemoAx(
+    () => computePhaseProjectionsArgile(allEntries),
+    [allEntries]
+  );
 
   // Distribution heures de sommeil
   const sleepDist = useMemoAx(() => {
@@ -399,7 +473,7 @@ function ArgileStatsDeep() {
         </div>
       </div>
 
-      {/* ── Calendrier annuel (données réelles) ── */}
+      {/* ── Calendrier annuel (données réelles + simulation) ── */}
       <div style={{ background: ARGILE.paper, padding: '20px 16px 16px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
         <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
           Calendrier annuel · {year}
@@ -414,9 +488,13 @@ function ArgileStatsDeep() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(31, 1fr)', gap: 2, flex: 1 }}>
                 {Array.from({ length: 31 }, (_, di) => {
                   if (di >= monthDays[mi]) return <div key={di} />;
-                  const ds    = dateStr(year, mi, di + 1);
-                  const entry = entryByDate[ds];
-                  const isFut = ds > todayStr;
+                  const ds      = dateStr(year, mi, di + 1);
+                  const entry   = entryByDate[ds];
+                  const isFut   = ds > todayStr;
+                  const isToday = ds === todayStr;
+                  const proj    = projMap[ds];
+                  const todayOutline = isToday ? { outline: `1.5px solid ${ARGILE.clay}`, outlineOffset: '-0.5px' } : {};
+
                   if (entry) {
                     const z = zoneOf(entry.mood);
                     return (
@@ -427,9 +505,31 @@ function ArgileStatsDeep() {
                           height: 10, borderRadius: 2, cursor: 'pointer',
                           background: z ? z.color : ARGILE.sand2,
                           boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.10)',
+                          ...todayOutline,
                         }} />
                     );
                   }
+
+                  if (proj) {
+                    const isUp  = proj === 'up';
+                    const alpha = isFut ? 0.50 : 0.75;
+                    const hatch = isUp
+                      ? `repeating-linear-gradient(45deg, rgba(214,122,60,${alpha}) 0 1.5px, ${ARGILE.sand2} 1.5px 3.5px)`
+                      : `repeating-linear-gradient(45deg, rgba(107,92,132,${alpha}) 0 1.5px, ${ARGILE.sand2} 1.5px 3.5px)`;
+                    const hatchBorder = isUp ? 'rgba(214,122,60,0.7)' : 'rgba(107,92,132,0.7)';
+                    return (
+                      <div key={di}
+                        onClick={() => setEditDate(ds)}
+                        title={`${ds} · ${isUp ? 'Phase Haute (simulée)' : 'Phase Basse (simulée)'}`}
+                        style={{
+                          height: 10, borderRadius: 2, cursor: 'pointer',
+                          background: hatch,
+                          outline: isToday ? `1.5px solid ${ARGILE.clay}` : `0.8px solid ${hatchBorder}`,
+                          outlineOffset: '-0.5px',
+                        }} />
+                    );
+                  }
+
                   return (
                     <div key={di}
                       onClick={() => !isFut ? setEditDate(ds) : null}
@@ -438,6 +538,7 @@ function ArgileStatsDeep() {
                         background: ARGILE.sand2,
                         opacity: isFut ? 0.18 : 0.42,
                         cursor: isFut ? 'default' : 'pointer',
+                        ...todayOutline,
                       }} />
                   );
                 })}
@@ -456,6 +557,26 @@ function ArgileStatsDeep() {
               <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>{z.l}</span>
             </span>
           ))}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 12, height: 10, borderRadius: 2, display: 'inline-block',
+              background: `repeating-linear-gradient(45deg, rgba(214,122,60,0.6) 0 1.5px, ${ARGILE.sand2} 1.5px 3.5px)`,
+              outline: '0.8px solid rgba(214,122,60,0.7)', outlineOffset: '-0.5px' }} />
+            <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Phase Haute ↗</span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 12, height: 10, borderRadius: 2, display: 'inline-block',
+              background: `repeating-linear-gradient(45deg, rgba(107,92,132,0.6) 0 1.5px, ${ARGILE.sand2} 1.5px 3.5px)`,
+              outline: '0.8px solid rgba(107,92,132,0.7)', outlineOffset: '-0.5px' }} />
+            <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Phase Basse ↘</span>
+          </span>
+        </div>
+        {/* Bandeau info simulation */}
+        <div style={{ marginTop: 12, padding: '8px 12px', background: ARGILE.sand2, borderRadius: 8 }}>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.10em', color: ARGILE.muted, textTransform: 'uppercase', lineHeight: 1.6 }}>
+            {projFromDate
+              ? `Simulation depuis le ${fmtDateFR(projFromDate)} · phase ${projPhase === 'up' ? 'haute' : 'basse'} · cycles de 21 jours`
+              : 'Pas assez de données pour simuler les phases.'}
+          </span>
         </div>
       </div>
 
