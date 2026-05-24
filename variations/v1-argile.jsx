@@ -617,6 +617,16 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const [screen, setScreen] = useStateA(initialScreen);
   // Brouillon du journal : accumulé à travers les 3 étapes
   const [journalDraft, setJournalDraft] = useStateA({ mood: 58, sleep: 7, anxiety: 3, symptoms: [] });
+  const [restoreData, setRestoreData] = useStateA(null);
+
+  // Écouter les demandes de restauration (conflit de données Drive détecté)
+  useEffectA(() => {
+    const handleRestoreReq = (e) => {
+      setRestoreData(e.detail);
+    };
+    window.addEventListener('bipoltrack:restore-required', handleRestoreReq);
+    return () => window.removeEventListener('bipoltrack:restore-required', handleRestoreReq);
+  }, []);
 
   // Apply tweaks override to palette/density (mutates window.ARGILE_LIVE for screens to read)
   const pal = tweaks.palette || 'argile';
@@ -643,6 +653,14 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     if (idx >= 0) entries[idx] = entry;   // remplace si déjà noté aujourd'hui
     else entries.unshift(entry);
     LS.setJSON('bt_entries', entries);
+
+    // Mettre à jour le timestamp de modification locale
+    LS.set('bt_last_modified', String(Date.now()));
+    LS.set('bt_pending_sync', 'true');
+
+    // Signaler la modification pour la synchronisation asynchrone Google Drive
+    window.dispatchEvent(new CustomEvent('bipoltrack:datachanged'));
+    window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
   };
 
   let body;
@@ -680,6 +698,95 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
       }}>
         {body}
       </ArgileShell>
+
+      {/* Modal de résolution de conflits Google Drive (affiché à l'intérieur du simulateur iPhone) */}
+      {restoreData && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(43, 24, 16, 0.45)', backdropFilter: 'blur(8px)',
+          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20, boxSizing: 'border-box'
+        }}>
+          <div style={{
+            background: ARGILE.paper, borderRadius: 24, padding: '28px 20px',
+            border: `1.5px solid ${ARGILE.border}`, width: '100%', maxWidth: 330,
+            boxShadow: '0 16px 36px rgba(43,24,16,0.25)', boxSizing: 'border-box',
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: 18 }}>
+              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase' }}>Synchronisation</span>
+              <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 30, fontStyle: 'italic', color: ARGILE.ink, margin: '6px 0 0', fontWeight: 400 }}>Conflit détecté</h2>
+            </div>
+
+            <p style={{ fontSize: 13, lineHeight: 1.45, color: ARGILE.ink2, textAlign: 'center', margin: '0 0 20px' }}>
+              Une sauvegarde plus récente a été trouvée sur votre Google Drive. Que souhaitez-vous faire ?
+            </p>
+
+            {/* Fichier Drive */}
+            <div style={{
+              background: 'rgba(184,88,57,0.06)', border: `1.5px solid ${ARGILE.clay}`,
+              borderRadius: 14, padding: '14px 16px', marginBottom: 12,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: ARGILE.clay }} />
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.1em', color: ARGILE.clay, textTransform: 'uppercase' }}>Sur Google Drive (plus récent)</span>
+              </div>
+              <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic', lineHeight: 1 }}>
+                {(restoreData.entries || []).length} entrée{((restoreData.entries || []).length > 1) ? 's' : ''} · {(restoreData.meds || []).length} soin{((restoreData.meds || []).length > 1) ? 's' : ''}
+              </div>
+              <div style={{ fontSize: 10, color: ARGILE.muted, marginTop: 6, fontFamily: 'JetBrains Mono, monospace' }}>
+                Sauvegardé le {new Date(restoreData.lastModified || restoreData.ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+
+            {/* Fichier local */}
+            <div style={{
+              background: ARGILE.sand, border: `1.5px solid ${ARGILE.border}`,
+              borderRadius: 14, padding: '14px 16px', marginBottom: 24,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: ARGILE.muted }} />
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.15em', color: ARGILE.muted, textTransform: 'uppercase' }}>Sur cet appareil (local)</span>
+              </div>
+              <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic', lineHeight: 1 }}>
+                {LS.getJSON('bt_entries', []).length} entrée{LS.getJSON('bt_entries', []).length > 1 ? 's' : ''} · {LS.getJSON('bt_meds', []).length} soin{LS.getJSON('bt_meds', []).length > 1 ? 's' : ''}
+              </div>
+              <div style={{ fontSize: 10, color: ARGILE.muted, marginTop: 6, fontFamily: 'JetBrains Mono, monospace' }}>
+                Modifié le {new Date(+(LS.get('bt_last_modified') || Date.now())).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={() => {
+                  if (window.ArgileDrive) window.ArgileDrive.doRestoreFromDrive(restoreData);
+                  setRestoreData(null);
+                }}
+                style={{
+                  width: '100%', padding: '13px 16px', border: 'none', borderRadius: 100,
+                  background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
+                  fontStyle: 'italic', fontSize: 16, cursor: 'pointer', fontWeight: 500,
+                  boxShadow: '0 4px 12px rgba(184,88,57,0.18)', transition: 'all 0.15s',
+                }}
+              >
+                Télécharger la version Drive
+              </button>
+              <button
+                onClick={() => {
+                  if (window.ArgileDrive) window.ArgileDrive.keepLocalAndOverwrite();
+                  setRestoreData(null);
+                }}
+                style={{
+                  width: '100%', padding: '11px 16px', border: `1px solid ${ARGILE.border}`, borderRadius: 100,
+                  background: 'transparent', color: ARGILE.ink2, fontFamily: 'Instrument Serif, serif',
+                  fontStyle: 'italic', fontSize: 15, cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >
+                Garder ma version locale (écrase Drive)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </IOSDevice>
   );
 }

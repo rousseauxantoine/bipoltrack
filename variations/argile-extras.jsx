@@ -760,6 +760,385 @@ function ArgileHistory() {
 // ══════════════════════════════════════════════════════════════════════
 // LS est défini dans v1-argile.jsx (chargé avant ce fichier)
 
+// Helper stamp date YYYYMMDD
+function driveFileStamp() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const r = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${r}`;
+}
+
+window.ArgileDrive = {
+  // OAuth Token Fetcher (flux implicite, popup + postMessage)
+  getGoogleToken: () => new Promise((resolve, reject) => {
+    const driveId = LS.get('bt_drive_client_id');
+    if (!driveId) { reject(new Error('Client ID manquant')); return; }
+
+    const cached = sessionStorage.getItem('bt_google_token');
+    const expiry = sessionStorage.getItem('bt_google_token_expiry');
+    if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
+
+    // Calcul de redirectUri dynamique prenant en charge le sous-dossier bipoltrack sur github pages
+    let redirectUri = window.location.origin + '/oauth.html';
+    if (window.location.pathname.includes('/bipoltrack')) {
+      redirectUri = window.location.origin + '/bipoltrack/oauth.html';
+    } else if (window.location.pathname.includes('/redesign/')) {
+      redirectUri = window.location.origin + window.location.pathname.replace(/\/redesign\/[^\/]*$/, '') + '/oauth.html';
+    } else {
+      const lastSlash = window.location.pathname.lastIndexOf('/');
+      if (lastSlash !== -1) {
+        redirectUri = window.location.origin + window.location.pathname.substring(0, lastSlash) + '/oauth.html';
+      }
+    }
+
+    const scope = 'https://www.googleapis.com/auth/drive.file';
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(driveId)
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&response_type=token'
+      + '&scope=' + encodeURIComponent(scope);
+
+    const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
+    if (!popup) { reject(new Error('Popup bloqué — veuillez autoriser les popups pour ce site')); return; }
+
+    const onMsg = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const d = event.data;
+      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
+      window.removeEventListener('message', onMsg);
+      clearInterval(watchClose);
+      if (d.type === 'bt-oauth-token') {
+        const exp = +(d.expiresIn || 3600);
+        sessionStorage.setItem('bt_google_token', d.token);
+        sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
+        resolve(d.token);
+      } else {
+        reject(new Error(d.error || 'Authentification échouée'));
+      }
+    };
+    window.addEventListener('message', onMsg);
+
+    const watchClose = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(watchClose);
+        window.removeEventListener('message', onMsg);
+        reject(new Error('Fenêtre fermée sans authentification'));
+      }
+    }, 600);
+  }),
+
+  // Utilitaire fetch pour Drive API
+  driveFetch: async (url, token, options = {}) => {
+    options.headers = Object.assign({}, options.headers || {}, {
+      'Authorization': 'Bearer ' + token,
+    });
+    const resp = await fetch(url, options);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`Drive API ${resp.status}: ${txt.slice(0, 200)}`);
+    }
+    return resp;
+  },
+
+  // Recherche ou crée le dossier "BipolTrack-Sauvegardes"
+  findOrCreateFolder: async (token) => {
+    const folderName = 'BipolTrack-Sauvegardes';
+    const q = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const resp = await window.ArgileDrive.driveFetch(
+      'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)',
+      token
+    );
+    const data = await resp.json();
+    if (data.files && data.files.length > 0) {
+      return data.files[0].id;
+    }
+    
+    // Création du dossier
+    const createResp = await window.ArgileDrive.driveFetch(
+      'https://www.googleapis.com/drive/v3/files',
+      token,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' }),
+      }
+    );
+    const created = await createResp.json();
+    return created.id;
+  },
+
+  // Recherche le fichier courant "bipoltrack-current.json" dans le dossier BipolTrack
+  findCurrentFile: async (token, folderId) => {
+    const filename = 'bipoltrack-current.json';
+    const q = `name='${filename}' and '${folderId}' in parents and trashed=false`;
+    const resp = await window.ArgileDrive.driveFetch(
+      'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name,modifiedTime)',
+      token
+    );
+    const data = await resp.json();
+    if (data.files && data.files.length > 0) {
+      return data.files[0].id;
+    }
+    return null;
+  },
+
+  // Lit la sauvegarde courante de Google Drive
+  readCurrentFile: async (token) => {
+    const folderId = await window.ArgileDrive.findOrCreateFolder(token);
+    const fileId = await window.ArgileDrive.findCurrentFile(token, folderId);
+    if (!fileId) return null;
+    const resp = await window.ArgileDrive.driveFetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      token
+    );
+    return await resp.json();
+  },
+
+  // Upload ou Patch de "bipoltrack-current.json"
+  uploadCurrentFile: async (token, folderId, jsonPayload) => {
+    const filename = 'bipoltrack-current.json';
+    const existingId = await window.ArgileDrive.findCurrentFile(token, folderId);
+    
+    const boundary = '-------bt' + Date.now();
+    const metadata = { name: filename, mimeType: 'application/json', parents: [folderId] };
+    const body =
+      `--${boundary}\r\n` +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) + '\r\n' +
+      `--${boundary}\r\n` +
+      'Content-Type: application/json\r\n\r\n' +
+      jsonPayload + '\r\n' +
+      `--${boundary}--`;
+
+    if (existingId) {
+      // PATCH pour mettre à jour le contenu
+      await window.ArgileDrive.driveFetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`,
+        token,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: jsonPayload,
+        }
+      );
+    } else {
+      // POST pour créer le fichier
+      await window.ArgileDrive.driveFetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        token,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+          body,
+        }
+      );
+    }
+  },
+
+  // Upload d'un snapshot daté de sauvegarde
+  uploadSnapshotFile: async (token, folderId, filename, jsonPayload) => {
+    const boundary = '-------bt' + Date.now();
+    const metadata = { name: filename, parents: [folderId], mimeType: 'application/json' };
+    const body =
+      `--${boundary}\r\n` +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) + '\r\n' +
+      `--${boundary}\r\n` +
+      'Content-Type: application/json\r\n\r\n' +
+      jsonPayload + '\r\n' +
+      `--${boundary}--`;
+
+    await window.ArgileDrive.driveFetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+      token,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body,
+      }
+    );
+  },
+
+  // Nettoyage des snapshots anciens pour n'en garder que 10 max
+  cleanupOldSnapshots: async (token, folderId) => {
+    const q = `'${folderId}' in parents and name contains 'bipoltrack-sauvegarde-' and trashed=false`;
+    const resp = await window.ArgileDrive.driveFetch(
+      'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+      '&fields=files(id,name,createdTime)&orderBy=createdTime desc',
+      token
+    );
+    const data = await resp.json();
+    const files = (data.files || []).filter(f => f.name !== 'bipoltrack-current.json');
+    const MAX_BACKUPS = 10;
+    if (files.length <= MAX_BACKUPS) return;
+    
+    for (const f of files.slice(MAX_BACKUPS)) {
+      try {
+        await window.ArgileDrive.driveFetch(
+          `https://www.googleapis.com/drive/v3/files/${f.id}`,
+          token,
+          { method: 'DELETE' }
+        );
+      } catch (e) {
+        console.warn('Suppression du snapshot ancien échouée pour', f.name, e);
+      }
+    }
+  },
+
+  // Construit le payload de sauvegarde complet
+  buildBackupPayload: () => {
+    return {
+      app: 'BipolTrack',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      entries: LS.getJSON('bt_entries', []),
+      meds: LS.getJSON('bt_meds', []),
+      patientName: LS.get('bt_patient_name'),
+      patientDob: LS.get('bt_patient_dob'),
+      patientDoctor: LS.get('bt_patient_doctor'),
+      lastModified: +(LS.get('bt_last_modified') || Date.now()),
+    };
+  },
+
+  // Sauvegarde manuelle ou automatique
+  saveNow: async (silent = false, setFeedback) => {
+    if (setFeedback) setFeedback('en cours…');
+    try {
+      const token = await window.ArgileDrive.getGoogleToken();
+      const payload = JSON.stringify(window.ArgileDrive.buildBackupPayload(), null, 2);
+      
+      const folderId = await window.ArgileDrive.findOrCreateFolder(token);
+      
+      // Téléverser le fichier de référence
+      await window.ArgileDrive.uploadCurrentFile(token, folderId, payload);
+      
+      // Téléverser le snapshot daté
+      const filename = `bipoltrack-sauvegarde-${driveFileStamp()}-${Date.now()}.json`;
+      await window.ArgileDrive.uploadSnapshotFile(token, folderId, filename, payload);
+      
+      // Nettoyer les snapshots anciens
+      await window.ArgileDrive.cleanupOldSnapshots(token, folderId);
+
+      LS.set('bt_last_synced', String(Date.now()));
+      LS.set('bt_pending_sync', 'false');
+      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+      if (setFeedback) setFeedback('sauvegardé ✓');
+    } catch (e) {
+      console.error(e);
+      if (setFeedback) setFeedback('erreur : ' + e.message);
+    }
+    if (setFeedback) setTimeout(() => setFeedback(''), 4000);
+  },
+
+  // Restauration à la demande
+  syncFromDrive: async (silent = false, setFeedback) => {
+    if (setFeedback) setFeedback('chargement…');
+    try {
+      const token = await window.ArgileDrive.getGoogleToken();
+      const fileContent = await window.ArgileDrive.readCurrentFile(token);
+      if (!fileContent) {
+        if (setFeedback) setFeedback('aucune sauvegarde');
+        return;
+      }
+      
+      // Déclencher l'affichage de la modal de résolution
+      window.dispatchEvent(new CustomEvent('bipoltrack:restore-required', { detail: fileContent }));
+      if (setFeedback) setFeedback('');
+    } catch (e) {
+      console.error(e);
+      if (setFeedback) setFeedback('erreur : ' + e.message);
+    }
+    if (setFeedback) setTimeout(() => setFeedback(''), 4000);
+  },
+
+  // Auto-détection de conflit de données
+  checkSyncStatus: async (silent = true) => {
+    try {
+      const driveId = LS.get('bt_drive_client_id');
+      if (!driveId) return;
+      const token = await window.ArgileDrive.getGoogleToken();
+      const driveData = await window.ArgileDrive.readCurrentFile(token);
+      if (!driveData) {
+        // Pousser le local s'il contient des données
+        const localEntries = LS.getJSON('bt_entries', []);
+        if (localEntries.length > 0) {
+          await window.ArgileDrive.saveNow(true);
+        }
+        return;
+      }
+
+      const driveLM = driveData.lastModified || driveData.ts || 0;
+      const localLM = +(LS.get('bt_last_modified') || 0);
+      const tolerance = 5000;
+
+      if (driveLM > localLM + tolerance) {
+        // Drive plus récent, afficher la modal
+        window.dispatchEvent(new CustomEvent('bipoltrack:restore-required', { detail: driveData }));
+      } else if (localLM > driveLM + tolerance) {
+        // Local plus récent, sauvegarder sur le Drive
+        await window.ArgileDrive.saveNow(true);
+      } else {
+        // Synchronisé
+        LS.set('bt_last_synced', String(Date.now()));
+        LS.set('bt_pending_sync', 'false');
+        window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+      }
+    } catch (e) {
+      console.warn('Silent sync status check failed:', e);
+    }
+  },
+
+  // Appliquer la version du Drive
+  doRestoreFromDrive: (payload) => {
+    if (!payload) return;
+    if (payload.entries) LS.setJSON('bt_entries', payload.entries);
+    if (payload.meds) LS.setJSON('bt_meds', payload.meds);
+    if (payload.patientName) LS.set('bt_patient_name', payload.patientName);
+    if (payload.patientDob) LS.set('bt_patient_dob', payload.patientDob);
+    if (payload.patientDoctor) LS.set('bt_patient_doctor', payload.patientDoctor);
+    
+    LS.set('bt_last_modified', String(payload.lastModified || payload.ts || Date.now()));
+    LS.set('bt_pending_sync', 'false');
+    LS.set('bt_last_synced', String(Date.now()));
+    window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+  },
+
+  // Appliquer la version locale (écraser le Drive)
+  keepLocalAndOverwrite: async () => {
+    LS.set('bt_last_modified', String(Date.now()));
+    LS.set('bt_pending_sync', 'true');
+    await window.ArgileDrive.saveNow(true);
+  },
+
+  // Lancement de sauvegarde automatique asynchrone
+  triggerSync: async () => {
+    const isPending = LS.get('bt_pending_sync') === 'true';
+    if (!isPending) return;
+    try {
+      const token = await window.ArgileDrive.getGoogleToken();
+      const folderId = await window.ArgileDrive.findOrCreateFolder(token);
+      const payload = JSON.stringify(window.ArgileDrive.buildBackupPayload(), null, 2);
+      
+      await window.ArgileDrive.uploadCurrentFile(token, folderId, payload);
+      LS.set('bt_pending_sync', 'false');
+      LS.set('bt_last_synced', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+    } catch (e) {
+      console.warn('Auto sync failure:', e);
+    }
+  }
+};
+
+// Écouteur pour auto-sauvegarde après modification du journal
+window.addEventListener('bipoltrack:datachanged', () => {
+  const syncAuto = LS.get('bt_auto_backup') === 'true';
+  const hasClient = !!LS.get('bt_drive_client_id');
+  if (hasClient && syncAuto) {
+    window.ArgileDrive.triggerSync();
+  }
+});
+
 function ArgileSettings() {
   const [patientName,   setPatientName]   = useStateAx(LS.get('bt_patient_name'));
   const [patientDob,    setPatientDob]    = useStateAx(LS.get('bt_patient_dob'));
@@ -770,6 +1149,17 @@ function ArgileSettings() {
   const [syncMessage,     setSyncMessage]    = useStateAx('');
   const [backupFeedback,  setBackupFeedback] = useStateAx('');
   const [syncFeedback,    setSyncFeedback]   = useStateAx('');
+  const [lastSyncedState, setLastSyncedState] = useStateAx(LS.get('bt_last_synced'));
+
+  // Écouter les événements de synchronisation pour rafraîchir en temps réel
+  const { useEffect: useEffectAx3 } = React;
+  useEffectAx3(() => {
+    const handleSynced = () => {
+      setLastSyncedState(LS.get('bt_last_synced'));
+    };
+    window.addEventListener('bipoltrack:synced', handleSynced);
+    return () => window.removeEventListener('bipoltrack:synced', handleSynced);
+  }, []);
 
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
 
@@ -779,6 +1169,13 @@ function ArgileSettings() {
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
     setSyncMessage('Synchronisation configurée ✓');
     setTimeout(() => setSyncMessage(''), 3000);
+    
+    // Déclencher immédiatement une vérification silencieuse du nouveau Client ID
+    if (v) {
+      setTimeout(() => {
+        window.ArgileDrive.checkSyncStatus(true);
+      }, 500);
+    }
   };
 
   const toggleSync = () => {
@@ -818,135 +1215,22 @@ function ArgileSettings() {
     setTimeout(() => setExportFeedback(''), 2000);
   };
 
-  // ── Google Drive — OAuth token (flux implicite, popup + postMessage) ─
-  // redirect_uri fixe : <origin>/oauth.html  →  à enregistrer dans Google Cloud Console
-  const getGoogleToken = () => new Promise((resolve, reject) => {
-    const cached = sessionStorage.getItem('bt_google_token');
-    const expiry  = sessionStorage.getItem('bt_google_token_expiry');
-    if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
-    if (!driveId) { reject(new Error('Client ID manquant')); return; }
-
-    const redirectUri = window.location.origin + '/oauth.html';
-    const scope    = 'https://www.googleapis.com/auth/drive.file';
-    const authUrl  = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id='     + encodeURIComponent(driveId)
-      + '&redirect_uri='  + encodeURIComponent(redirectUri)
-      + '&response_type=token'
-      + '&scope='         + encodeURIComponent(scope);
-
-    const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
-    if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
-
-    // Le token est transmis par oauth.html via postMessage
-    const onMsg = (event) => {
-      if (event.origin !== window.location.origin) return;
-      const d = event.data;
-      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
-      window.removeEventListener('message', onMsg);
-      clearInterval(watchClose);
-      if (d.type === 'bt-oauth-token') {
-        const exp = +(d.expiresIn || 3600);
-        sessionStorage.setItem('bt_google_token', d.token);
-        sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
-        resolve(d.token);
-      } else {
-        reject(new Error(d.error || 'auth échouée'));
-      }
-    };
-    window.addEventListener('message', onMsg);
-
-    // Fallback si la fenêtre est fermée sans postMessage
-    const watchClose = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(watchClose);
-        window.removeEventListener('message', onMsg);
-        reject(new Error('Fenêtre fermée sans authentification'));
-      }
-    }, 600);
-  });
-
-  // ── Sauvegarder vers Drive ─────────────────────────────────────────
-  const saveNow = async () => {
-    setBackupFeedback('en cours…');
-    try {
-      const token   = await getGoogleToken();
-      const payload = JSON.stringify({
-        app: 'BipolTrack', version: 2, exportedAt: new Date().toISOString(),
-        entries:       LS.getJSON('bt_entries', []),
-        meds:          LS.getJSON('bt_meds',    []),
-        patientName:   LS.get('bt_patient_name'),
-        patientDob:    LS.get('bt_patient_dob'),
-        patientDoctor: LS.get('bt_patient_doctor'),
-      }, null, 2);
-
-      const filename = 'bipoltrack-backup.json';
-      const search   = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=name='${filename}'+and+trashed=false`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      ).then(r => r.json());
-      const fileId = search.files?.[0]?.id;
-
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/json' })], { type: 'application/json' }));
-      form.append('file',     new Blob([payload], { type: 'application/json' }));
-
-      const res = await fetch(
-        fileId
-          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,
-        { method: fileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
-      );
-      if (!res.ok) throw new Error(`Drive ${res.status}`);
-
-      LS.set('bt_last_synced', String(Date.now()));
-      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
-      setBackupFeedback('sauvegardé ✓');
-    } catch (e) {
-      setBackupFeedback('erreur : ' + e.message);
-    }
-    setTimeout(() => setBackupFeedback(''), 4000);
+  const saveNow = () => {
+    window.ArgileDrive.saveNow(false, setBackupFeedback);
   };
 
-  // ── Synchroniser depuis Drive ──────────────────────────────────────
-  const syncFromDrive = async () => {
-    setSyncFeedback('chargement…');
-    try {
-      const token  = await getGoogleToken();
-      const search = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=name='bipoltrack-backup.json'+and+trashed=false`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      ).then(r => r.json());
-      const fileId = search.files?.[0]?.id;
-      if (!fileId) { setSyncFeedback('aucune sauvegarde trouvée'); setTimeout(() => setSyncFeedback(''), 4000); return; }
-
-      const file = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      ).then(r => r.json());
-
-      if (file.entries)       LS.setJSON('bt_entries', file.entries);
-      if (file.meds)          LS.setJSON('bt_meds',    file.meds);
-      if (file.patientName)   LS.set('bt_patient_name',   file.patientName);
-      if (file.patientDob)    LS.set('bt_patient_dob',    file.patientDob);
-      if (file.patientDoctor) LS.set('bt_patient_doctor', file.patientDoctor);
-
-      LS.set('bt_last_synced', String(Date.now()));
-      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
-      setSyncFeedback('synchronisé ✓');
-    } catch (e) {
-      setSyncFeedback('erreur : ' + e.message);
-    }
-    setTimeout(() => setSyncFeedback(''), 4000);
+  const syncFromDrive = () => {
+    window.ArgileDrive.syncFromDrive(false, setSyncFeedback);
   };
 
-  const lastSynced = LS.get('bt_last_synced');
-  const driveSyncLabel = lastSynced
+  const driveSyncLabel = lastSyncedState
     ? (() => {
-        const d = new Date(+lastSynced);
+        const d = new Date(+lastSyncedState);
         return 'synchro ' + d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
           + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       })()
     : 'jamais synchronisé';
+
   const driveStatus = driveId ? `ID configuré · ${driveSyncLabel}` : 'Non configuré';
 
   return (
@@ -1107,3 +1391,20 @@ function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
 Object.assign(window, {
   ArgileEmpty, ArgileNews, ArgileStatsDeep, ArgileMeds, ArgileReport, ArgileHistory, ArgileSettings,
 });
+
+// Déclenchement automatique de la vérification de synchro au démarrage
+(function() {
+  const driveId = LS.get('bt_drive_client_id');
+  const syncAuto = LS.get('bt_auto_backup') === 'true';
+  if (driveId && syncAuto) {
+    const cached = sessionStorage.getItem('bt_google_token');
+    const expiry = sessionStorage.getItem('bt_google_token_expiry');
+    if (cached && expiry && Date.now() < +expiry) {
+      setTimeout(() => {
+        if (window.ArgileDrive) {
+          window.ArgileDrive.checkSyncStatus(true);
+        }
+      }, 1000); // Laisser l'application React se monter complètement
+    }
+  }
+})();
