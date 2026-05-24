@@ -157,78 +157,116 @@ function ArgileNews() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// STATS DEEP — calendrier annuel + graphes
+// STATS DEEP — calendrier annuel + graphes (données réelles)
 // ══════════════════════════════════════════════════════════════════════
 function ArgileStatsDeep() {
-  const [year, setYear] = useStateAx(2026);
+  const [year, setYear] = useStateAx(new Date().getFullYear());
 
-  // Generate pseudo-random data for the year
-  const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
-  const monthDays = [31,28,31,30,31,30,31,31,30,31,30,31];
-  const zoneColor = (v) => {
-    if (v < 20) return '#6B5C84';
-    if (v < 40) return '#A47A6C';
-    if (v < 60) return '#C39265';
-    if (v < 80) return '#D67A3C';
-    return '#B85839';
-  };
-  const seed = (m, d) => {
-    const n = Math.sin((m * 31 + d * 7 + 13) * 0.7) * 30
-            + Math.cos((m + d) * 0.3) * 20
-            + 50 + (m === 4 && d > 10 ? 10 : 0);
-    return Math.max(5, Math.min(95, Math.round(n)));
-  };
-  // current entries: only up to May 24
-  const today = { m: 4, d: 24 };
-  const filled = (m, d) => (m < today.m) || (m === today.m && d <= today.d);
-  const isFuture = (m, d) => !filled(m, d);
+  // ── Données réelles depuis bt_entries ────────────────────────────
+  const allEntries = useMemoAx(() =>
+    LS.getJSON('bt_entries', [])
+      .filter(e => e.date)
+      .sort((a, b) => a.date < b.date ? -1 : 1),
+  []);
 
-  // ── PROJECTION DES PHASES À VENIR ─────────────────────────────────────
-  // Simulation : à partir des 30 derniers jours, l'algo projette 2 fenêtres
-  // de risque sur 8 semaines à venir.
-  //   - "up"   = risque de phase haute / hypomanie / manie
-  //   - "down" = risque de phase basse / dépressive
-  // Intensité 0–1 = niveau de confiance.
-  const projWindows = [
-    { m: 5, dStart: 3,  dEnd: 12, kind: 'up',   peak: 7,  confidence: 0.72 }, // 3–12 juin : haute
-    { m: 5, dStart: 24, dEnd: 30, kind: 'down', peak: 27, confidence: 0.48 }, // 24–30 juin : bas léger
-    { m: 6, dStart: 1,  dEnd: 9,  kind: 'down', peak: 4,  confidence: 0.55 }, // début juillet : creux modéré
-  ];
-  const projAt = (m, d) => {
-    if (!isFuture(m, d)) return null;
-    for (const w of projWindows) {
-      if (w.m === m && d >= w.dStart && d <= w.dEnd) {
-        const dist = Math.abs(d - w.peak);
-        const span = (w.dEnd - w.dStart) / 2;
-        const intensity = Math.max(0.25, 1 - dist / (span + 1)) * w.confidence;
-        return { kind: w.kind, intensity };
-      }
+  const yearEntries = useMemoAx(
+    () => allEntries.filter(e => e.date.startsWith(String(year))),
+    [allEntries, year]
+  );
+
+  const entryByDate = useMemoAx(() => {
+    const m = {};
+    yearEntries.forEach(e => { m[e.date] = e; });
+    return m;
+  }, [yearEntries]);
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  const median = arr => {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+
+  const zoneOf = v => {
+    if (v == null) return null;
+    if (v < 20) return { label: 'Sombre', color: '#6B5C84' };
+    if (v < 40) return { label: 'Bas',     color: '#A47A6C' };
+    if (v < 60) return { label: 'Stable',  color: '#C39265' };
+    if (v < 80) return { label: 'Haut',    color: '#D67A3C' };
+    return               { label: 'Brûlant',color: '#B85839' };
+  };
+
+  const dateStr = (y, mi, d) =>
+    `${y}-${String(mi + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  // ── Calculs statistiques ──────────────────────────────────────────
+  const moods  = yearEntries.map(e => e.mood).filter(v => v != null);
+  const sleeps = yearEntries.map(e => e.sleep).filter(v => v != null);
+
+  const moodMed  = median(moods);
+  const sleepMed = median(sleeps);
+  const moodZone = zoneOf(moodMed);
+
+  // Série : jours consécutifs à partir de la dernière entrée
+  const streak = useMemoAx(() => {
+    if (!allEntries.length) return 0;
+    const dates = new Set(allEntries.map(e => e.date));
+    const sorted = [...dates].sort().reverse();
+    let count = 1;
+    let prev = new Date(sorted[0] + 'T12:00:00');
+    for (let i = 1; i < sorted.length; i++) {
+      const cur = new Date(sorted[i] + 'T12:00:00');
+      if (Math.round((prev - cur) / 86400000) === 1) { count++; prev = cur; }
+      else break;
     }
-    return null;
-  };
+    return count;
+  }, [allEntries]);
 
-  // Patterns for hatched projected days
-  const projBg = (kind, intensity) => {
-    const op = 0.35 + intensity * 0.5;
-    const color = kind === 'up' ? `rgba(214, 122, 60, ${op})` : `rgba(107, 92, 132, ${op})`;
-    return `repeating-linear-gradient(45deg, ${color} 0 1.5px, ${ARGILE.sand2} 1.5px 3.5px)`;
-  };
-  const projBorder = (kind) => kind === 'up' ? 'rgba(214,122,60,0.7)' : 'rgba(107,92,132,0.7)';
+  // Distribution par zone
+  const zoneDist = useMemoAx(() => [
+    { label: 'Brûlant', color: '#B85839', count: yearEntries.filter(e => e.mood >= 80).length },
+    { label: 'Haut',    color: '#D67A3C', count: yearEntries.filter(e => e.mood >= 60 && e.mood < 80).length },
+    { label: 'Stable',  color: '#C39265', count: yearEntries.filter(e => e.mood >= 40 && e.mood < 60).length },
+    { label: 'Bas',     color: '#A47A6C', count: yearEntries.filter(e => e.mood >= 20 && e.mood < 40).length },
+    { label: 'Sombre',  color: '#6B5C84', count: yearEntries.filter(e => e.mood < 20).length },
+  ], [yearEntries]);
 
-  // 30-day mood line + 14 days projection
-  const recent = Array.from({ length: 30 }, (_, i) => seed(4, i - 5 + 24));
-  // simple projection curve: blend recent median (~55) toward projected window peak
-  const futureProj = Array.from({ length: 14 }, (_, i) => {
-    const d = today.d + 1 + i; // days into May then June
-    let mm = today.m, dd = d;
-    if (dd > 31) { mm = 5; dd = dd - 31; }
-    const p = projAt(mm, dd);
-    if (!p) return 55;
-    return p.kind === 'up' ? 55 + p.intensity * 30 : 55 - p.intensity * 30;
-  });
+  // 30 dernières entrées pour sparkline
+  const last30 = useMemoAx(() => allEntries.slice(-30), [allEntries]);
+
+  // Distribution heures de sommeil
+  const sleepDist = useMemoAx(() => {
+    const buckets = {};
+    for (let h = 3; h <= 12; h++) buckets[h] = 0;
+    yearEntries.forEach(e => {
+      if (e.sleep != null) { const h = Math.round(e.sleep); if (h >= 3 && h <= 12) buckets[h]++; }
+    });
+    return Object.entries(buckets).map(([h, c]) => ({ h: +h, c }));
+  }, [yearEntries]);
+
+  const months    = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
+  const monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const todayStr  = new Date().toISOString().slice(0, 10);
+  const maxSleep  = Math.max(...sleepDist.map(b => b.c), 1);
+
+  // ── État vide ─────────────────────────────────────────────────────
+  if (allEntries.length === 0) {
+    return (
+      <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 14px' }}>Le carnet</p>
+        <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 32, color: ARGILE.muted, marginBottom: 12 }}>Rien encore.</div>
+        <p style={{ fontSize: 14, color: ARGILE.muted, lineHeight: 1.6 }}>
+          Note ta première journée<br/>pour voir ton carnet prendre forme.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '20px 20px 0' }}>
+
+      {/* ── Header + navigation année ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
         <div>
           <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Le carnet</p>
@@ -241,15 +279,38 @@ function ArgileStatsDeep() {
           <button onClick={() => setYear(y => y + 1)} style={{ width: 32, height: 32, borderRadius: '50%', border: `1px solid ${ARGILE.border}`, background: ARGILE.paper, color: ARGILE.ink2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>›</button>
         </div>
       </div>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 0 20px' }}>142 jours notés. 14 d'affilée.</p>
+      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 0 20px' }}>
+        {yearEntries.length} jour{yearEntries.length > 1 ? 's' : ''} noté{yearEntries.length > 1 ? 's' : ''}
+        {streak > 1 ? ` · ${streak} j d'affilée` : ''}
+      </p>
 
-      {/* Key metrics — 4 tiles */}
+      {/* ── 4 tuiles métriques réelles ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
         {[
-          { l: 'Médiane',     v: 'Stable', sub: '5 mois durs en 2025', c: ARGILE.clay },
-          { l: 'Sommeil',     v: '7,2h',   sub: '↑ 0,4h vs an passé',  c: ARGILE.olive },
-          { l: 'Adhérence',   v: '94%',    sub: 'Lithium régulier',     c: '#7A6F2F' },
-          { l: 'Série',       v: '14 j',   sub: 'Record : 38',         c: ARGILE.clay },
+          {
+            l: 'Médiane',
+            v: moodZone ? moodZone.label : '—',
+            c: moodZone ? moodZone.color : ARGILE.muted,
+            sub: moodMed != null ? `score ${Math.round(moodMed)}/100` : 'aucune donnée',
+          },
+          {
+            l: 'Sommeil',
+            v: sleepMed != null ? sleepMed.toFixed(1).replace('.', ',') + 'h' : '—',
+            c: ARGILE.olive,
+            sub: sleeps.length ? `médiane sur ${sleeps.length} nuit${sleeps.length > 1 ? 's' : ''}` : 'aucune donnée',
+          },
+          {
+            l: 'Journées notées',
+            v: yearEntries.length,
+            c: '#7A6F2F',
+            sub: `en ${year}`,
+          },
+          {
+            l: 'Série',
+            v: streak + ' j',
+            c: ARGILE.clay,
+            sub: streak > 1 ? 'consécutifs' : 'aucune série',
+          },
         ].map((t, i) => (
           <div key={i} style={{ padding: '14px 16px', background: ARGILE.paper, borderRadius: 14, border: `1px solid ${ARGILE.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -262,248 +323,144 @@ function ArgileStatsDeep() {
         ))}
       </div>
 
-      {/* 30-day editorial chart with 14-day projection */}
+      {/* ── Sparkline — dernières entrées ── */}
       <div style={{ background: ARGILE.paper, padding: '18px 18px 14px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase' }}>
-            30 j passés <span style={{ color: ARGILE.border }}>·</span> 14 j projetés
-          </div>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+          {last30.length} dernière{last30.length > 1 ? 's' : ''} entrée{last30.length > 1 ? 's' : ''}
         </div>
         <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 12 }}>
-          Une courbe qui se pose.
+          {moodZone ? `Tendance : ${moodZone.label.toLowerCase()}.` : 'Ton évolution.'}
         </div>
-        <svg viewBox="0 0 320 110" style={{ width: '100%', height: 110 }}>
-          {/* zone bands */}
-          <rect x="0" y="0"  width="320" height="20" fill="#B85839" opacity="0.07" />
-          <rect x="0" y="20" width="320" height="20" fill="#D67A3C" opacity="0.07" />
-          <rect x="0" y="40" width="320" height="20" fill="#C39265" opacity="0.10" />
-          <rect x="0" y="60" width="320" height="20" fill="#A47A6C" opacity="0.07" />
-          <rect x="0" y="80" width="320" height="20" fill="#6B5C84" opacity="0.07" />
-
-          {/* today divider */}
-          {(() => {
-            const totalDays = 30 + 14;
-            const todayX = (29 / (totalDays - 1)) * 320;
-            return (
-              <>
-                <line x1={todayX} y1="0" x2={todayX} y2="100" stroke={ARGILE.muted} strokeWidth="0.8" strokeDasharray="2 3" />
-                <text x={todayX + 3} y="108" fontSize="8" fill={ARGILE.muted} fontFamily="JetBrains Mono">aujourd'hui</text>
-              </>
-            );
-          })()}
-
-          {/* past line (solid) */}
-          <path
-            d={recent.map((d, i) => `${i === 0 ? 'M' : 'L'} ${(i / 43) * 320} ${100 - (d / 100) * 95 - 2.5}`).join(' ')}
-            fill="none" stroke={ARGILE.clay} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
-          />
-
-          {/* projection — dashed, with confidence band */}
-          {(() => {
-            const allProj = [recent[29], ...futureProj];
-            const pts = allProj.map((d, i) => `${((29 + i) / 43) * 320},${100 - (d / 100) * 95 - 2.5}`);
-            // confidence band upper/lower
-            const band = allProj.map((d, i) => {
-              const margin = i === 0 ? 0 : Math.min(14, i * 1.2);
-              return { x: ((29 + i) / 43) * 320, y: 100 - (d / 100) * 95 - 2.5, m: margin };
-            });
-            const upper = band.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y - p.m * 0.95}`).join(' ');
-            const lower = band.slice().reverse().map((p) => `L ${p.x} ${p.y + p.m * 0.95}`).join(' ');
-            return (
-              <>
-                <path d={`${upper} ${lower} Z`} fill={ARGILE.clay} opacity="0.10" />
-                <path d={`M ${pts.join(' L ')}`} fill="none" stroke={ARGILE.clay} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7" />
-              </>
-            );
-          })()}
-
-          {/* points */}
-          {recent.map((d, i) => (
-            <circle key={'p'+i} cx={(i / 43) * 320} cy={100 - (d / 100) * 95 - 2.5} r={i === 29 ? 4 : 1.8} fill={ARGILE.clay} />
-          ))}
-        </svg>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          <span>Brûlant</span><span>Haut</span><span>Stable</span><span>Bas</span><span>Sombre</span>
-        </div>
+        {last30.length >= 2 ? (
+          <>
+            <svg viewBox="0 0 320 100" style={{ width: '100%', height: 100 }}>
+              <rect x="0" y="0"  width="320" height="20" fill="#B85839" opacity="0.06" />
+              <rect x="0" y="20" width="320" height="20" fill="#D67A3C" opacity="0.06" />
+              <rect x="0" y="40" width="320" height="20" fill="#C39265" opacity="0.09" />
+              <rect x="0" y="60" width="320" height="20" fill="#A47A6C" opacity="0.06" />
+              <rect x="0" y="80" width="320" height="20" fill="#6B5C84" opacity="0.06" />
+              <path
+                d={last30.map((e, i) => {
+                  const x = (i / (last30.length - 1)) * 316 + 2;
+                  const y = 95 - ((e.mood ?? 50) / 100) * 88;
+                  return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                }).join(' ')}
+                fill="none" stroke={ARGILE.clay} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+              />
+              {last30.map((e, i) => {
+                const x = (i / (last30.length - 1)) * 316 + 2;
+                const y = 95 - ((e.mood ?? 50) / 100) * 88;
+                return <circle key={i} cx={x} cy={y} r={i === last30.length - 1 ? 4 : 2} fill={ARGILE.clay} opacity={0.45 + (i / last30.length) * 0.55} />;
+              })}
+            </svg>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <span>Brûlant</span><span>Haut</span><span>Stable</span><span>Bas</span><span>Sombre</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted }}>
+              <span>{last30[0].date}</span>
+              <span>{last30[last30.length - 1].date}</span>
+            </div>
+          </>
+        ) : (
+          <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
+            Pas encore assez d'entrées pour tracer une courbe.
+          </p>
+        )}
       </div>
 
-      {/* PROJECTION CARD — phases à venir */}
-      <div style={{
-        background: ARGILE.paper, padding: '20px 20px 18px', borderRadius: 18,
-        border: `1px solid ${ARGILE.border}`, marginBottom: 16, position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-          background: `linear-gradient(90deg, ${ARGILE.clay} 0%, #D67A3C 30%, ${ARGILE.sand2} 50%, #6B5C84 100%)`,
-        }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase' }}>
-            Projection · 8 semaines
-          </div>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.08em', color: ARGILE.muted }}>
-            modèle v2.1
-          </div>
+      {/* ── Distribution par zone ── */}
+      <div style={{ background: ARGILE.paper, padding: '18px 18px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+          Distribution par zone · {year}
         </div>
-        <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 14, lineHeight: 1.2 }}>
-          Deux fenêtres à surveiller.
+        <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 14 }}>
+          {yearEntries.length} journée{yearEntries.length > 1 ? 's' : ''} mesurée{yearEntries.length > 1 ? 's' : ''}.
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            { kind: 'up',   label: 'Phase Haute', window: '3 → 12 juin', conf: 72, hint: 'sommeil plus court depuis 5 j · vigilance', color: '#D67A3C' },
-            { kind: 'down', label: 'Phase Basse', window: '1 → 9 juillet', conf: 55, hint: 'cycle post-règles · anniversaire difficile', color: '#6B5C84' },
-          ].map((w, i) => (
-            <div key={i} style={{
-              display: 'flex', gap: 14, padding: '12px 14px', alignItems: 'center',
-              borderRadius: 12, background: ARGILE.sand,
-              border: `1px solid ${w.kind === 'up' ? 'rgba(214,122,60,0.35)' : 'rgba(107,92,132,0.35)'}`,
-            }}>
-              {/* hatched preview */}
-              <div style={{
-                width: 38, height: 38, borderRadius: 8, flexShrink: 0,
-                background: w.kind === 'up'
-                  ? 'repeating-linear-gradient(45deg, rgba(214,122,60,0.7) 0 3px, rgba(214,122,60,0.15) 3px 6px)'
-                  : 'repeating-linear-gradient(45deg, rgba(107,92,132,0.7) 0 3px, rgba(107,92,132,0.15) 3px 6px)',
-                border: `1.5px solid ${w.color}`,
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 19, color: ARGILE.ink, fontStyle: 'italic' }}>{w.label}</span>
-                  <span style={{ fontSize: 11, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace' }}>{w.window}</span>
-                </div>
-                <div style={{ fontSize: 12, color: ARGILE.ink2, marginTop: 2, lineHeight: 1.4 }}>
-                  {w.hint}
-                </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {zoneDist.map(z => (
+            <div key={z.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.ink, width: 54, flexShrink: 0 }}>{z.label}</span>
+              <div style={{ flex: 1, height: 8, background: ARGILE.sand2, borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: yearEntries.length ? (z.count / yearEntries.length * 100) + '%' : '0%', height: '100%', background: z.color, borderRadius: 4 }} />
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: w.color, fontStyle: 'italic', lineHeight: 1 }}>{w.conf}<span style={{ fontSize: 12 }}>%</span></div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, letterSpacing: '0.10em', color: ARGILE.muted, textTransform: 'uppercase', marginTop: 2 }}>confiance</div>
-              </div>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: ARGILE.muted, width: 28, textAlign: 'right', flexShrink: 0 }}>{z.count}j</span>
             </div>
           ))}
         </div>
-
-        <p style={{ fontSize: 11, color: ARGILE.muted, margin: '14px 0 0', lineHeight: 1.5, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
-          « Projection basée sur les 60 derniers jours, le sommeil, le cycle et l'historique. Indicative — pas un diagnostic. »
-        </p>
       </div>
 
-      {/* Annual calendar grid */}
+      {/* ── Calendrier annuel (données réelles) ── */}
       <div style={{ background: ARGILE.paper, padding: '20px 16px 16px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
         <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-          Calendrier annuel · noté + projeté
+          Calendrier annuel · {year}
         </div>
         <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 16 }}>
-          Le passé en couleur, l'avenir en hachures.
+          Le passé en couleur.
         </div>
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {months.map((mname, mi) => (
             <div key={mname} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.08em',
-                color: ARGILE.muted, textTransform: 'uppercase', width: 24, flexShrink: 0,
-              }}>{mname}</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.08em', color: ARGILE.muted, textTransform: 'uppercase', width: 24, flexShrink: 0 }}>{mname}</span>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(31, 1fr)', gap: 2, flex: 1 }}>
                 {Array.from({ length: 31 }, (_, di) => {
                   if (di >= monthDays[mi]) return <div key={di} />;
-                  const d = di + 1;
-                  if (filled(mi, d)) {
-                    const v = seed(mi, d);
+                  const ds    = dateStr(year, mi, di + 1);
+                  const entry = entryByDate[ds];
+                  const isFut = ds > todayStr;
+                  if (entry) {
+                    const z = zoneOf(entry.mood);
                     return (
-                      <div key={di} style={{
-                        height: 10, borderRadius: 2, background: zoneColor(v),
-                        boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.1)',
-                      }} />
-                    );
-                  }
-                  // future cell — projected?
-                  const p = projAt(mi, d);
-                  if (p) {
-                    return (
-                      <div key={di} title={`Projection ${p.kind === 'up' ? 'Haute' : 'Basse'} · ${Math.round(p.intensity*100)}%`} style={{
+                      <div key={di} title={`${ds} · ${z ? z.label : '?'}`} style={{
                         height: 10, borderRadius: 2,
-                        background: projBg(p.kind, p.intensity),
-                        outline: `0.8px solid ${projBorder(p.kind)}`,
-                        outlineOffset: '-0.5px',
+                        background: z ? z.color : ARGILE.sand2,
+                        boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.10)',
                       }} />
                     );
                   }
-                  return <div key={di} style={{ height: 10, borderRadius: 2, background: ARGILE.sand2, opacity: 0.35 }} />;
+                  return <div key={di} style={{ height: 10, borderRadius: 2, background: ARGILE.sand2, opacity: isFut ? 0.18 : 0.42 }} />;
                 })}
               </div>
             </div>
           ))}
         </div>
-
-        {/* legend */}
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.12em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 8 }}>
-            ─ noté ─
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 10, color: ARGILE.ink2, marginBottom: 12 }}>
-            {[
-              { l: 'Sombre', c: '#6B5C84' },
-              { l: 'Bas', c: '#A47A6C' },
-              { l: 'Stable', c: '#C39265' },
-              { l: 'Haut', c: '#D67A3C' },
-              { l: 'Brûlant', c: '#B85839' },
-            ].map(z => (
-              <span key={z.l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 12, height: 10, background: z.c, borderRadius: 2 }} />
-                <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>{z.l}</span>
-              </span>
-            ))}
-          </div>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.12em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 8 }}>
-            ─ projeté ─
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 10, color: ARGILE.ink2 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{
-                width: 12, height: 10, borderRadius: 2,
-                background: 'repeating-linear-gradient(45deg, rgba(214,122,60,0.7) 0 1.5px, rgba(214,122,60,0.15) 1.5px 3.5px)',
-                border: '1px solid rgba(214,122,60,0.7)',
-              }} />
-              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Phase Haute (à venir)</span>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{
-                width: 12, height: 10, borderRadius: 2,
-                background: 'repeating-linear-gradient(45deg, rgba(107,92,132,0.7) 0 1.5px, rgba(107,92,132,0.15) 1.5px 3.5px)',
-                border: '1px solid rgba(107,92,132,0.7)',
-              }} />
-              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Phase Basse (à venir)</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Sleep distribution */}
-      <div style={{ background: ARGILE.paper, padding: '18px 18px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 28 }}>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-          Sommeil · distribution
-        </div>
-        <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 18 }}>
-          7,2 heures, en médiane.
-        </div>
-        <svg viewBox="0 0 280 80" style={{ width: '100%', height: 80 }}>
+        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 10, color: ARGILE.ink2 }}>
           {[
-            { h: 4, c: 8 },  { h: 5, c: 12 }, { h: 6, c: 22 },
-            { h: 7, c: 40 }, { h: 8, c: 38 }, { h: 9, c: 18 },
-            { h: 10, c: 6 }, { h: 11, c: 2 },
-          ].map((b, i) => {
-            const x = i * 35 + 6;
-            const h = b.c * 1.6;
-            return (
-              <g key={i}>
-                <rect x={x} y={80 - h - 14} width="24" height={h} fill={b.h === 7 ? ARGILE.clay : ARGILE.sand2} rx="2" />
-                <text x={x + 12} y={78} textAnchor="middle" fontSize="9" fill={ARGILE.muted} fontFamily="JetBrains Mono">{b.h}h</text>
-              </g>
-            );
-          })}
-        </svg>
+            { l: 'Sombre', c: '#6B5C84' }, { l: 'Bas', c: '#A47A6C' },
+            { l: 'Stable', c: '#C39265' }, { l: 'Haut', c: '#D67A3C' },
+            { l: 'Brûlant', c: '#B85839' },
+          ].map(z => (
+            <span key={z.l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 12, height: 10, background: z.c, borderRadius: 2, display: 'inline-block' }} />
+              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>{z.l}</span>
+            </span>
+          ))}
+        </div>
       </div>
+
+      {/* ── Distribution sommeil ── */}
+      {sleepDist.some(b => b.c > 0) && (
+        <div style={{ background: ARGILE.paper, padding: '18px 18px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 28 }}>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+            Sommeil · distribution
+          </div>
+          <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 18 }}>
+            {sleepMed != null ? `${sleepMed.toFixed(1).replace('.', ',')} heures, en médiane.` : 'Tes nuits.'}
+          </div>
+          <svg viewBox={`0 0 ${sleepDist.length * 28 + 10} 80`} style={{ width: '100%', height: 80 }}>
+            {sleepDist.map((b, i) => {
+              const x    = i * 28 + 6;
+              const barH = Math.max(b.c > 0 ? 3 : 0, (b.c / maxSleep) * 54);
+              const isMed = sleepMed != null && Math.round(sleepMed) === b.h;
+              return (
+                <g key={i}>
+                  <rect x={x} y={66 - barH} width="18" height={barH} fill={isMed ? ARGILE.clay : ARGILE.sand2} rx="2" />
+                  <text x={x + 9} y={78} textAnchor="middle" fontSize="9" fill={ARGILE.muted} fontFamily="JetBrains Mono">{b.h}h</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
