@@ -230,7 +230,200 @@ function ArgilePhaseHeader({ phase, total = 3, date }) {
   );
 }
 
-// ───── Carte de sélection d'état (partagée entre les 3 phases) ─────
+// ───── Slider snap 3 positions (partagé entre les 3 dimensions) ─────
+// opts = [{id, label, color}, ...] — toujours 3 éléments dans l'ordre bas→milieu→haut
+function ArgileSnapSlider({ dimLabel, opts, value, onChange }) {
+  const ref = useRefA(null);
+  const [grab, setGrab]   = useStateA(false);
+  const [rawX, setRawX]   = useStateA(value * 50); // position continue pendant le glissement
+
+  // Les 3 positions visuelles (% dans la barre) : centrées dans chaque tiers
+  const SNAP_POS = [16.7, 50, 83.3];
+
+  const snapIdx = (rawPct) => rawPct < 33.3 ? 0 : rawPct < 66.7 ? 1 : 2;
+
+  const onDown = (e) => {
+    e.preventDefault();
+    setGrab(true);
+    const move = (ev) => {
+      if (!ref.current) return;
+      const r   = ref.current.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+      setRawX(pct);
+      onChange(snapIdx(pct));
+    };
+    move(e);
+    const up = (ev) => {
+      if (ref.current) {
+        const r   = ref.current.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(100, ((ev.clientX - r.left) / r.width) * 100));
+        const idx = snapIdx(pct);
+        onChange(idx);
+        setRawX(SNAP_POS[idx]); // ramène la boule exactement sur la position de snap
+      }
+      setGrab(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const opt   = opts[value];
+  const orbX  = grab ? rawX : SNAP_POS[value];
+  const orbBg = `radial-gradient(circle at 35% 30%, #f8e9d0 0%, ${opt.color} 55%, #5C2E1A 100%)`;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      {/* Label dimension + valeur sélectionnée */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.16em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>
+          {dimLabel}
+        </p>
+        <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 20, color: opt.color }}>
+          {opt.label}
+        </span>
+      </div>
+
+      {/* Piste */}
+      <div ref={ref} onPointerDown={onDown} style={{
+        position: 'relative', height: 64, borderRadius: 32,
+        cursor: grab ? 'grabbing' : 'grab', touchAction: 'none',
+        background: `linear-gradient(90deg, ${opts[0].color} 0%, ${opts[1].color} 50%, ${opts[2].color} 100%)`,
+        boxShadow: grab
+          ? 'inset 0 2px 8px rgba(43,24,16,0.25), inset 0 -1px 0 rgba(255,255,255,0.2), 0 0 0 6px rgba(184,88,57,0.10)'
+          : 'inset 0 2px 6px rgba(43,24,16,0.15), inset 0 -1px 0 rgba(255,255,255,0.18)',
+        overflow: 'hidden', transition: 'box-shadow 0.18s',
+      }}>
+        {/* Séparateurs aux tiers */}
+        {[33.3, 66.7].map(t => (
+          <div key={t} style={{ position: 'absolute', left: t + '%', top: 8, bottom: 8, width: 1, background: 'rgba(43,24,16,0.20)' }} />
+        ))}
+        {/* Boule */}
+        <div style={{
+          position: 'absolute',
+          left: `calc(${orbX}% - 28px)`,
+          top: 4, width: 56, height: 56, borderRadius: '50%',
+          background: orbBg,
+          boxShadow: grab
+            ? '0 10px 24px rgba(43,24,16,0.45), inset 0 -4px 8px rgba(43,24,16,0.3)'
+            : '0 6px 14px rgba(43,24,16,0.35), inset 0 -3px 6px rgba(43,24,16,0.25)',
+          transform: grab ? 'scale(1.08)' : 'scale(1)',
+          transition: grab
+            ? 'transform 0.1s'
+            : 'left 0.28s cubic-bezier(0.3,1.4,0.5,1), transform 0.15s, box-shadow 0.18s',
+        }} />
+      </div>
+
+      {/* Étiquettes des 3 positions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, padding: '0 4px' }}>
+        {opts.map((o, i) => (
+          <span key={o.id} onClick={() => { onChange(i); setRawX(SNAP_POS[i]); }} style={{
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13,
+            color: value === i ? opt.color : ARGILE.muted,
+            fontWeight: value === i ? 600 : 400,
+            transition: 'color 0.2s', cursor: 'pointer',
+          }}>{o.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ───── Journal — page unique avec les 3 dimensions ─────
+function ArgileJournalSaisie({ onSave }) {
+  const [humeur,  setHumeur]  = useStateA(1); // 0=bas 1=milieu 2=haut — démarre au centre
+  const [pensees, setPensees] = useStateA(1);
+  const [energie, setEnergie] = useStateA(1);
+
+  const lsMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
+  const [checkedMeds, setCheckedMeds] = useStateA(() => lsMeds.map(m => m.id));
+  const toggleMed = (id) => setCheckedMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const [note, setNote] = useStateA('');
+
+  const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
+
+  return (
+    <div style={{ padding: '0 24px' }}>
+      {/* En-tête date */}
+      <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 20px' }}>
+        {todayLabel}
+      </p>
+
+      {/* 3 sliders */}
+      <ArgileSnapSlider dimLabel="01 — l'humeur"    opts={ARGILE_HUMEUR_OPTS}  value={humeur}  onChange={setHumeur}  />
+      <ArgileSnapSlider dimLabel="02 — les pensées" opts={ARGILE_PENSEES_OPTS} value={pensees} onChange={setPensees} />
+      <ArgileSnapSlider dimLabel="03 — l'énergie"   opts={ARGILE_ENERGIE_OPTS} value={energie} onChange={setEnergie} />
+
+      {/* Traitements */}
+      <div style={{ marginBottom: 24 }}>
+        <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Traitements pris</span>
+        <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 12px' }}>Tap pour cocher.</p>
+        {lsMeds.length === 0 ? (
+          <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.5 }}>
+            Aucun traitement — rends-toi dans <em>Soins</em> pour en ajouter.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {lsMeds.map(m => {
+              const sel    = checkedMeds.includes(m.id);
+              const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
+              return (
+                <button key={m.id} onClick={() => toggleMed(m.id)} style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
+                  borderRadius: 14, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
+                  background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer', textAlign: 'left',
+                }}>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%',
+                    border: `2px solid ${sel ? ARGILE.clay : ARGILE.muted}`,
+                    background: sel ? ARGILE.clay : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    {sel && <svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5 L4 7.5 L10 1" stroke="#FBF6EB" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, lineHeight: 1.1 }}>{m.name}</div>
+                    {detail && <div style={{ fontSize: 12, color: ARGILE.muted, marginTop: 2 }}>{detail}</div>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Note libre */}
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Une note ?</span>
+        <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 10px' }}>Optionnel. Ce qui te traverse.</p>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} style={{
+          width: '100%', minHeight: 96, padding: '14px 16px', borderRadius: 14,
+          border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, resize: 'none',
+          fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 1.5, color: ARGILE.ink,
+          fontStyle: 'italic', outline: 'none', boxSizing: 'border-box',
+        }} />
+      </div>
+
+      {/* Bouton */}
+      <button onClick={() => onSave(
+        ARGILE_HUMEUR_OPTS[humeur].id,
+        ARGILE_PENSEES_OPTS[pensees].id,
+        ARGILE_ENERGIE_OPTS[energie].id,
+        checkedMeds, note
+      )} style={{
+        width: '100%', marginTop: 18, padding: '18px 20px', border: 'none', borderRadius: 100,
+        background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
+        fontStyle: 'italic', fontSize: 20, cursor: 'pointer',
+        boxShadow: '0 6px 16px rgba(184,88,57,0.25)',
+      }}>
+        Fermer la journée
+      </button>
+    </div>
+  );
+}
+
+// ────────────────────────── LEGACY — conservé pour ArgileEditEntry ──────────
 function ArgileStateCard({ opt, selected, onSelect }) {
   return (
     <button onClick={onSelect} style={{
@@ -261,39 +454,6 @@ function ArgileStateCard({ opt, selected, onSelect }) {
         )}
       </div>
     </button>
-  );
-}
-
-const JOURNAL_BTN = (disabled) => ({
-  width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
-  background: disabled ? ARGILE.sand2 : ARGILE.ink,
-  color: disabled ? ARGILE.muted : ARGILE.paper,
-  fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18,
-  cursor: disabled ? 'default' : 'pointer', transition: 'all 0.18s',
-});
-
-// ───── Journal · phase 1 — Humeur ─────
-function ArgileJournalHumeur({ onNext }) {
-  const [v, setV] = useStateA(null);
-  return (
-    <>
-      <ArgilePhaseHeader phase={1} />
-      <div style={{ padding: '0 24px' }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>01 — l'humeur</p>
-        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
-          Comment te <span style={{ fontStyle: 'italic' }}>sens-tu ?</span>
-        </h1>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-          {ARGILE_HUMEUR_OPTS.map(opt => (
-            <ArgileStateCard key={opt.id} opt={opt} selected={v === opt.id} onSelect={() => setV(opt.id)} />
-          ))}
-        </div>
-        <button onClick={() => v && onNext(v)} style={JOURNAL_BTN(!v)}>
-          Continuer — les pensées →
-        </button>
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>Étape 1 sur 3</p>
-      </div>
-    </>
   );
 }
 
@@ -361,113 +521,6 @@ function ArgileChips({ items, selected, onToggle }) {
   );
 }
 
-// ───── Journal · phase 2 — Pensées ─────
-function ArgileJournalPensees({ onNext }) {
-  const [v, setV] = useStateA(null);
-  return (
-    <>
-      <ArgilePhaseHeader phase={2} />
-      <div style={{ padding: '0 24px' }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>02 — les pensées</p>
-        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
-          Ton <span style={{ fontStyle: 'italic' }}>esprit</span> ?
-        </h1>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-          {ARGILE_PENSEES_OPTS.map(opt => (
-            <ArgileStateCard key={opt.id} opt={opt} selected={v === opt.id} onSelect={() => setV(opt.id)} />
-          ))}
-        </div>
-        <button onClick={() => v && onNext(v)} style={JOURNAL_BTN(!v)}>
-          Continuer — l'énergie →
-        </button>
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>Étape 2 sur 3</p>
-      </div>
-    </>
-  );
-}
-
-// ───── Journal · phase 3 — Énergie ─────
-function ArgileJournalEnergie({ onSave }) {
-  const [v, setV] = useStateA(null);
-  const lsMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
-  const [checkedMeds, setCheckedMeds] = useStateA(() => lsMeds.map(m => m.id));
-  const toggleMed = (id) => setCheckedMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const [note, setNote] = useStateA('');
-  return (
-    <>
-      <ArgilePhaseHeader phase={3} />
-      <div style={{ padding: '0 24px' }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>03 — l'énergie</p>
-        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
-          Ton <span style={{ fontStyle: 'italic' }}>élan</span> ?
-        </h1>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-          {ARGILE_ENERGIE_OPTS.map(opt => (
-            <ArgileStateCard key={opt.id} opt={opt} selected={v === opt.id} onSelect={() => setV(opt.id)} />
-          ))}
-        </div>
-
-        {/* Traitements */}
-        <div style={{ marginBottom: 24 }}>
-          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Traitements pris</span>
-          <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 12px' }}>Tap pour cocher.</p>
-          {lsMeds.length === 0 ? (
-            <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.5 }}>
-              Aucun traitement configuré — rends-toi dans <em>Soins</em> pour en ajouter.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {lsMeds.map(m => {
-                const sel = checkedMeds.includes(m.id);
-                const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
-                return (
-                  <button key={m.id} onClick={() => toggleMed(m.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-                    borderRadius: 14, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
-                    background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer', textAlign: 'left',
-                  }}>
-                    <div style={{
-                      width: 22, height: 22, borderRadius: '50%',
-                      border: `2px solid ${sel ? ARGILE.clay : ARGILE.muted}`,
-                      background: sel ? ARGILE.clay : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      {sel && <svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5 L4 7.5 L10 1" stroke="#FBF6EB" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, lineHeight: 1.1 }}>{m.name}</div>
-                      {detail && <div style={{ fontSize: 12, color: ARGILE.muted, marginTop: 2 }}>{detail}</div>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Note libre */}
-        <div style={{ marginBottom: 8 }}>
-          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Une note ?</span>
-          <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 10px' }}>Optionnel. Ce qui te traverse.</p>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} style={{
-            width: '100%', minHeight: 100, padding: '14px 16px', borderRadius: 14,
-            border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, resize: 'none',
-            fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 1.5, color: ARGILE.ink,
-            fontStyle: 'italic', outline: 'none', boxSizing: 'border-box',
-          }} />
-        </div>
-
-        <button onClick={() => v && onSave(v, checkedMeds, note)} style={{
-          ...JOURNAL_BTN(!v), marginTop: 18, padding: '18px 20px', fontSize: 20,
-          ...(v ? { background: ARGILE.clay, boxShadow: '0 6px 16px rgba(184,88,57,0.25)' } : {}),
-        }}>
-          Fermer la journée
-        </button>
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>Étape 3 sur 3</p>
-      </div>
-    </>
-  );
-}
 
 // ───── Done · le retour récompense ─────
 function ArgileDone() {
@@ -685,9 +738,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   };
 
   let body;
-  if (screen === 'journal')      body = <ArgileJournalHumeur onNext={(h) => { setJournalDraft(d => ({...d, humeur: h})); setScreen('pensees'); }} />;
-  else if (screen === 'pensees') body = <ArgileJournalPensees onNext={(p) => { setJournalDraft(d => ({...d, pensees: p})); setScreen('energie'); }} />;
-  else if (screen === 'energie') body = <ArgileJournalEnergie onSave={(e, meds, note) => { saveEntry({...journalDraft, energie: e, meds, note}); setScreen('done'); }} />;
+  if (screen === 'journal')      body = <ArgileJournalSaisie onSave={(h, p, e, meds, note) => { saveEntry({ humeur: h, pensees: p, energie: e, meds, note }); setScreen('done'); }} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
   else if (screen === 'empty'   && window.ArgileEmpty)   body = <ArgileEmpty onStart={() => setScreen('journal')} />;
@@ -701,7 +752,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
 
   // Group journal sub-screens under "journal" tab; report/history/settings under their nearest tab
   let active;
-  if (['pensees','energie','done','journal','empty'].includes(screen)) active = 'journal';
+  if (['done','journal','empty'].includes(screen)) active = 'journal';
   else if (screen === 'history' || screen === 'stats' || screen === 'stats-deep') active = 'stats';
   else if (screen === 'meds' || screen === 'report') active = 'meds';
   else if (screen === 'news') active = 'news';
