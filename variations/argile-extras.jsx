@@ -732,16 +732,22 @@ function ArgileReport() {
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.16em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 6 }}>
             Traitements en cours
           </div>
-          {[
-            ['Lithium', '800 mg · coucher', '96%'],
-            ['Dépakine', '500 mg · M + S', '92%'],
-            ['Lamictal', '100 mg · matin', '88%'],
-          ].map(([n, d, a], i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < 2 ? `1px dotted ${ARGILE.border}` : 'none', fontSize: 13 }}>
-              <span style={{ fontFamily: 'Instrument Serif, serif', fontWeight: 500, color: ARGILE.ink }}>{n}<span style={{ fontStyle: 'italic', color: ARGILE.muted, fontWeight: 400, marginLeft: 6, fontSize: 12 }}>— {d}</span></span>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: ARGILE.clay }}>{a}</span>
-            </div>
-          ))}
+          {(() => {
+            const meds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
+            if (meds.length === 0) return (
+              <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', margin: 0 }}>
+                Aucun traitement configuré.
+              </p>
+            );
+            return meds.map((m, i) => {
+              const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
+              return (
+                <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < meds.length - 1 ? `1px dotted ${ARGILE.border}` : 'none', fontSize: 13 }}>
+                  <span style={{ fontFamily: 'Instrument Serif, serif', fontWeight: 500, color: ARGILE.ink }}>{m.name}{detail && <span style={{ fontStyle: 'italic', color: ARGILE.muted, fontWeight: 400, marginLeft: 6, fontSize: 12 }}>— {detail}</span>}</span>
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {/* Notes synthesis */}
