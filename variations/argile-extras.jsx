@@ -160,14 +160,16 @@ function ArgileNews() {
 // STATS DEEP — calendrier annuel + graphes (données réelles)
 // ══════════════════════════════════════════════════════════════════════
 function ArgileStatsDeep() {
-  const [year, setYear] = useStateAx(new Date().getFullYear());
+  const [year,       setYear]       = useStateAx(new Date().getFullYear());
+  const [refreshKey, setRefreshKey] = useStateAx(0);
+  const [editDate,   setEditDate]   = useStateAx(null);
 
   // ── Données réelles depuis bt_entries ────────────────────────────
   const allEntries = useMemoAx(() =>
     LS.getJSON('bt_entries', [])
       .filter(e => e.date)
       .sort((a, b) => a.date < b.date ? -1 : 1),
-  []);
+  [refreshKey]);
 
   const yearEntries = useMemoAx(
     () => allEntries.filter(e => e.date.startsWith(String(year))),
@@ -265,6 +267,14 @@ function ArgileStatsDeep() {
 
   return (
     <div style={{ padding: '20px 20px 0' }}>
+      {editDate && (
+        <ArgileEditEntry
+          date={editDate}
+          entry={allEntries.find(e => e.date === editDate) || null}
+          onSave={() => { setRefreshKey(k => k + 1); setEditDate(null); }}
+          onClose={() => setEditDate(null)}
+        />
+      )}
 
       {/* ── Header + navigation année ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
@@ -410,14 +420,26 @@ function ArgileStatsDeep() {
                   if (entry) {
                     const z = zoneOf(entry.mood);
                     return (
-                      <div key={di} title={`${ds} · ${z ? z.label : '?'}`} style={{
-                        height: 10, borderRadius: 2,
-                        background: z ? z.color : ARGILE.sand2,
-                        boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.10)',
-                      }} />
+                      <div key={di}
+                        onClick={() => setEditDate(ds)}
+                        title={`${ds} · ${z ? z.label : '?'}`}
+                        style={{
+                          height: 10, borderRadius: 2, cursor: 'pointer',
+                          background: z ? z.color : ARGILE.sand2,
+                          boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.10)',
+                        }} />
                     );
                   }
-                  return <div key={di} style={{ height: 10, borderRadius: 2, background: ARGILE.sand2, opacity: isFut ? 0.18 : 0.42 }} />;
+                  return (
+                    <div key={di}
+                      onClick={() => !isFut ? setEditDate(ds) : null}
+                      style={{
+                        height: 10, borderRadius: 2,
+                        background: ARGILE.sand2,
+                        opacity: isFut ? 0.18 : 0.42,
+                        cursor: isFut ? 'default' : 'pointer',
+                      }} />
+                  );
                 })}
               </div>
             </div>
@@ -755,63 +777,313 @@ function ArgileReport() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// HISTORIQUE — liste des entrées
+// EDIT ENTRY — bottom sheet d'édition d'une journée (par date)
 // ══════════════════════════════════════════════════════════════════════
-function ArgileHistory() {
-  const entries = [
-    { d: 'Sam. 23 mai', zone: 'Stable', v: 58, sleep: '7h30', symp: ['Fatigue'], note: 'J\'ai marché 30min avec Léa. Ça m\'a sortie de ma tête.' },
-    { d: 'Ven. 22 mai', zone: 'Stable', v: 54, sleep: '7h00', symp: [], note: 'Journée tranquille. RDV avec Dr. Mercier.' },
-    { d: 'Jeu. 21 mai', zone: 'Haut',   v: 72, sleep: '5h30', symp: ['Idées rapides', 'Agitation'], note: 'Beaucoup d\'envie de faire. Ai commencé deux projets. Vigilance.' },
-    { d: 'Mer. 20 mai', zone: 'Haut',   v: 68, sleep: '6h00', symp: ['Idées rapides'], note: 'Réveil 5h, énergie.' },
-    { d: 'Mar. 19 mai', zone: 'Stable', v: 52, sleep: '7h30', symp: [], note: 'Léa est venue dîner. Du bien.' },
-    { d: 'Lun. 18 mai', zone: 'Bas',    v: 28, sleep: '9h00', symp: ['Fatigue', 'Concentration', 'Pleurs'], note: 'Brouillard ce matin.' },
-  ];
+const ARGILE_SYMPTOMS = [
+  { id: 'agit',    label: 'Agitation' },
+  { id: 'fatigue', label: 'Fatigue' },
+  { id: 'irrit',   label: 'Irritabilité' },
+  { id: 'rapide',  label: 'Idées rapides' },
+  { id: 'concentr',label: 'Concentration' },
+  { id: 'isol',    label: 'Retrait social' },
+  { id: 'impuls',  label: 'Impulsivité' },
+  { id: 'pleurs',  label: 'Pleurs' },
+];
+const ARGILE_MENSTRUATION = [
+  { id: 'regles',   label: '🩸 Règles' },
+  { id: 'ovulation',label: '🌸 Ovulation' },
+];
+
+function ArgileEditEntry({ date, entry, onSave, onClose }) {
+  const [mood,         setMood]         = useStateAx(entry?.mood         ?? 50);
+  const [sleep,        setSleep]        = useStateAx(entry?.sleep        ?? 7);
+  const [anxiety,      setAnxiety]      = useStateAx(entry?.anxiety      ?? 0);
+  const [symptoms,     setSymptoms]     = useStateAx(entry?.symptoms     || []);
+  const [checkedMeds,  setCheckedMeds]  = useStateAx(entry?.meds         || []);
+  const [menstruation, setMenstruation] = useStateAx(entry?.menstruation || []);
+  const [note,         setNote]         = useStateAx(entry?.note         || '');
+
+  const allMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
+
+  const tog = (setter) => (id) =>
+    setter(arr => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+
+  const dateLabel = (() => {
+    try {
+      return new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
+        weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+      });
+    } catch { return date; }
+  })();
+
+  const handleSave = () => {
+    const all = LS.getJSON('bt_entries', []);
+    const updated = {
+      date, mood, sleep, anxiety, symptoms, meds: checkedMeds, note,
+      effects: entry?.effects || [], menstruation, ts: entry?.ts || Date.now(),
+    };
+    const idx = all.findIndex(e => e.date === date);
+    if (idx >= 0) all[idx] = updated; else all.unshift(updated);
+    LS.setJSON('bt_entries', all);
+    onSave(updated);
+  };
+
+  const handleDelete = () => {
+    if (!entry) { onClose(); return; }
+    LS.setJSON('bt_entries', LS.getJSON('bt_entries', []).filter(e => e.date !== date));
+    onSave(null);
+  };
+
+  const zone = ARGILE_ZONES.find(z => mood >= z.range[0] && mood <= z.range[1]) || ARGILE_ZONES[2];
+  const inputSt = { width: '100%', accentColor: ARGILE.clay };
+  const chipSt  = (on) => ({
+    padding: '6px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+    border: `1.5px solid ${on ? ARGILE.clay : ARGILE.border}`,
+    background: on ? 'rgba(184,88,57,0.10)' : 'transparent',
+    color: on ? ARGILE.clay : ARGILE.ink2,
+  });
 
   return (
-    <div style={{ padding: '20px 24px 0' }}>
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(43,24,16,0.5)',
+      zIndex: 300, display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '88vh', overflowY: 'auto',
+        background: ARGILE.sand, borderRadius: '20px 20px 0 0',
+        padding: '16px 20px 40px', boxSizing: 'border-box',
+      }}>
+        {/* handle */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 16px' }} />
+
+        {/* en-tête */}
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>Édition</p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 22, fontWeight: 400, color: ARGILE.ink, margin: '0 0 20px' }}>{dateLabel}</h2>
+
+        {/* Humeur */}
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 8px' }}>
+            Humeur · <span style={{ color: zone.color }}>{zone.label}</span>
+          </p>
+          <ArgileMoodOrb value={mood} onChange={setMood} />
+        </div>
+
+        {/* Sommeil */}
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' }}>
+            Sommeil · {sleep}h
+          </p>
+          <input type="range" min="0" max="12" step="0.5" value={sleep}
+            onChange={e => setSleep(+e.target.value)} style={inputSt} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+            <span>0h</span><span>6h</span><span>12h</span>
+          </div>
+        </div>
+
+        {/* Anxiété */}
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' }}>
+            Anxiété · {anxiety}/10
+          </p>
+          <input type="range" min="0" max="10" step="1" value={anxiety}
+            onChange={e => setAnxiety(+e.target.value)} style={inputSt} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+            <span>Aucune</span><span>Intense</span>
+          </div>
+        </div>
+
+        {/* Symptômes */}
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 10px' }}>Symptômes</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {ARGILE_SYMPTOMS.map(s => (
+              <button key={s.id} onClick={() => tog(setSymptoms)(s.id)} style={chipSt(symptoms.includes(s.id))}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Traitements */}
+        {allMeds.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 10px' }}>Traitements pris</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {allMeds.map(m => {
+                const on = checkedMeds.includes(m.id);
+                return (
+                  <button key={m.id} onClick={() => tog(setCheckedMeds)(m.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                    borderRadius: 12, border: `1.5px solid ${on ? ARGILE.clay : ARGILE.border}`,
+                    background: on ? 'rgba(184,88,57,0.08)' : 'transparent', cursor: 'pointer', textAlign: 'left',
+                  }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      border: `2px solid ${on ? ARGILE.clay : ARGILE.muted}`,
+                      background: on ? ARGILE.clay : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {on && <svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.5 6L8 1" stroke="#FBF6EB" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span style={{ fontSize: 14, color: ARGILE.ink }}>{m.name}{m.dose ? ` · ${m.dose}` : ''}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Menstruation */}
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 10px' }}>Cycle</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {ARGILE_MENSTRUATION.map(m => (
+              <button key={m.id} onClick={() => tog(setMenstruation)(m.id)} style={chipSt(menstruation.includes(m.id))}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Note */}
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 8px' }}>Note</p>
+          <textarea value={note} onChange={e => setNote(e.target.value)}
+            placeholder="Observations, ressenti…"
+            style={{ width: '100%', height: 80, padding: '10px 12px', borderRadius: 10, fontSize: 14,
+              border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, color: ARGILE.ink,
+              fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box', outline: 'none' }} />
+        </div>
+
+        {/* Actions */}
+        <button onClick={handleSave} style={{
+          width: '100%', padding: 16, border: 'none', borderRadius: 14,
+          background: ARGILE.ink, color: ARGILE.paper,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18, cursor: 'pointer', marginBottom: 10,
+        }}>Enregistrer</button>
+        {entry && (
+          <button onClick={handleDelete} style={{
+            width: '100%', padding: 12, borderRadius: 14, fontSize: 13, cursor: 'pointer', marginBottom: 8,
+            border: `1.5px solid rgba(184,88,57,0.3)`, background: 'transparent', color: ARGILE.clay,
+          }}>Supprimer cette journée</button>
+        )}
+        <button onClick={onClose} style={{
+          width: '100%', padding: 12, borderRadius: 14, fontSize: 14, cursor: 'pointer',
+          border: `1.5px solid ${ARGILE.border}`, background: 'transparent', color: ARGILE.ink2,
+        }}>Annuler</button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// HISTORIQUE — liste chronologique des entrées réelles
+// ══════════════════════════════════════════════════════════════════════
+function ArgileHistory() {
+  const [refreshKey, setRefreshKey] = useStateAx(0);
+  const [editDate,   setEditDate]   = useStateAx(null);
+
+  const entries = useMemoAx(() =>
+    LS.getJSON('bt_entries', [])
+      .filter(e => e.date)
+      .sort((a, b) => b.date.localeCompare(a.date)),
+  [refreshKey]);
+
+  const entryByDate = useMemoAx(() => {
+    const m = {};
+    entries.forEach(e => { m[e.date] = e; });
+    return m;
+  }, [entries]);
+
+  const zoneOf = v => ARGILE_ZONES.find(z => v >= z.range[0] && v <= z.range[1]) || ARGILE_ZONES[2];
+
+  const fmtDate = ds => {
+    try {
+      return new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', {
+        weekday: 'short', day: '2-digit', month: 'long',
+      });
+    } catch { return ds; }
+  };
+
+  const fmtSleep = h => {
+    if (h == null) return '';
+    const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+    return mm > 0 ? `${hh}h${String(mm).padStart(2,'0')}` : `${hh}h`;
+  };
+
+  const SYMP_LABEL = { agit:'Agitation', fatigue:'Fatigue', irrit:'Irritabilité',
+    rapide:'Idées rapides', concentr:'Concentration', isol:'Retrait',
+    impuls:'Impulsivité', pleurs:'Pleurs' };
+
+  return (
+    <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 100 }}>
+      {editDate && (
+        <ArgileEditEntry
+          date={editDate}
+          entry={entryByDate[editDate] || null}
+          onSave={() => { setRefreshKey(k => k + 1); setEditDate(null); }}
+          onClose={() => setEditDate(null)}
+        />
+      )}
+
       <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Toutes les journées</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '8px 0 0', color: ARGILE.ink, fontWeight: 400 }}>
         <span style={{ fontStyle: 'italic' }}>Historique</span>
       </h1>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 0 20px' }}>142 entrées · feuilleter.</p>
+      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 0 20px' }}>
+        {entries.length} entrée{entries.length !== 1 ? 's' : ''} · tape pour éditer.
+      </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {entries.map((e, i) => {
-          const zone = e.v >= 80 ? ARGILE_ZONES[4] : e.v >= 60 ? ARGILE_ZONES[3] : e.v >= 40 ? ARGILE_ZONES[2] : e.v >= 20 ? ARGILE_ZONES[1] : ARGILE_ZONES[0];
-          return (
-            <div key={i} style={{
-              background: ARGILE.paper, borderRadius: 14, padding: '14px 16px',
-              border: `1px solid ${ARGILE.border}`, display: 'flex', gap: 14, cursor: 'pointer',
-            }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                background: `radial-gradient(circle at 35% 30%, #f8e9d0 0%, ${zone.color} 55%, ${ARGILE.clayDk} 100%)`,
-                boxShadow: '0 2px 6px rgba(43,24,16,0.18)', alignSelf: 'flex-start', marginTop: 2,
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.1em', color: ARGILE.muted, textTransform: 'uppercase' }}>{e.d}</span>
-                  <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 14, fontStyle: 'italic', color: zone.color }}>{e.zone}</span>
-                </div>
-                <p style={{
-                  fontFamily: 'Instrument Serif, serif', fontSize: 15, fontStyle: 'italic',
-                  lineHeight: 1.4, color: ARGILE.ink, margin: '4px 0 6px',
-                  overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                }}>
-                  « {e.note} »
-                </p>
-                <div style={{ display: 'flex', gap: 8, fontSize: 11, color: ARGILE.muted, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em' }}>{e.sleep}</span>
-                  {e.symp.length > 0 && <>
-                    <span style={{ color: ARGILE.border }}>·</span>
-                    <span>{e.symp.join(' · ')}</span>
-                  </>}
+      {entries.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 26, color: ARGILE.muted }}>Rien encore.</div>
+          <p style={{ fontSize: 13, color: ARGILE.muted, marginTop: 8 }}>Note ta première journée dans l'onglet Journal.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {entries.map(e => {
+            const zone  = zoneOf(e.mood);
+            const symbs = (e.symptoms || []).map(s => SYMP_LABEL[s] || s).filter(Boolean);
+            return (
+              <div key={e.date} onClick={() => setEditDate(e.date)} style={{
+                background: ARGILE.paper, borderRadius: 14, padding: '14px 16px',
+                border: `1px solid ${ARGILE.border}`, display: 'flex', gap: 14, cursor: 'pointer',
+              }}>
+                {/* orbe humeur */}
+                <div style={{
+                  width: 38, height: 38, borderRadius: '50%', flexShrink: 0, alignSelf: 'flex-start', marginTop: 2,
+                  background: `radial-gradient(circle at 35% 30%, #f8e9d0 0%, ${zone.color} 55%, ${ARGILE.clayDk} 100%)`,
+                  boxShadow: '0 2px 6px rgba(43,24,16,0.18)',
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.1em', color: ARGILE.muted, textTransform: 'uppercase' }}>
+                      {fmtDate(e.date)}
+                    </span>
+                    <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 14, fontStyle: 'italic', color: zone.color }}>
+                      {zone.label}
+                    </span>
+                  </div>
+                  {e.note ? (
+                    <p style={{
+                      fontFamily: 'Instrument Serif, serif', fontSize: 15, fontStyle: 'italic',
+                      lineHeight: 1.4, color: ARGILE.ink, margin: '4px 0 6px',
+                      overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                    }}>« {e.note} »</p>
+                  ) : (
+                    <p style={{ fontSize: 13, color: ARGILE.border, fontStyle: 'italic', margin: '4px 0 6px' }}>—</p>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, fontSize: 11, color: ARGILE.muted, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {e.sleep != null && <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{fmtSleep(e.sleep)}</span>}
+                    {e.anxiety > 0 && <><span style={{ color: ARGILE.border }}>·</span><span>anxiété {e.anxiety}/10</span></>}
+                    {symbs.length > 0 && <><span style={{ color: ARGILE.border }}>·</span><span>{symbs.join(' · ')}</span></>}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1168,4 +1440,5 @@ function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
 
 Object.assign(window, {
   ArgileEmpty, ArgileNews, ArgileStatsDeep, ArgileMeds, ArgileReport, ArgileHistory, ArgileSettings,
+  ArgileEditEntry,
 });
