@@ -126,11 +126,39 @@ function ArgileShell({ children, active, onNav, hideHeader = false }) {
     { id: 'meds',    label: 'Soins' },
     { id: 'settings',label: '…' },
   ];
+
+  // Last sync badge — lit bt_last_synced, se met à jour via l'event 'bipoltrack:synced'
+  const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const [lastSynced, setLastSynced] = useStateA(() => lsGet('bt_last_synced'));
+  useEffectA(() => {
+    const handler = () => setLastSynced(lsGet('bt_last_synced'));
+    window.addEventListener('bipoltrack:synced', handler);
+    return () => window.removeEventListener('bipoltrack:synced', handler);
+  }, []);
+
+  const syncLabel = lastSynced
+    ? '↻ ' + new Date(+lastSynced).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+    : null;
+
   return (
     <div style={{
       width: '100%', height: '100%', background: ARGILE.sand,
       fontFamily: 'DM Sans, sans-serif', color: ARGILE.ink, position: 'relative', overflow: 'hidden',
     }}>
+      {/* Badge last sync — affiché sur toutes les pages si une synchro a eu lieu */}
+      {syncLabel && (
+        <div style={{
+          position: 'absolute', top: 10, right: 14, zIndex: 20,
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          letterSpacing: '0.08em', color: ARGILE.muted,
+          background: 'rgba(251,246,235,0.80)', backdropFilter: 'blur(6px)',
+          padding: '3px 8px', borderRadius: 20,
+          border: `1px solid ${ARGILE.border}`,
+          pointerEvents: 'none',
+        }}>
+          {syncLabel}
+        </div>
+      )}
       <div style={{ height: '100%', overflowY: 'auto', paddingTop: 54, paddingBottom: 100 }}>
         {children}
       </div>

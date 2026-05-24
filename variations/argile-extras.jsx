@@ -802,8 +802,17 @@ function ArgileSettings() {
   const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
   const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
   const [exportFeedback, setExportFeedback] = useStateAx('');
+  const [syncMessage,    setSyncMessage]   = useStateAx('');
 
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
+
+  const saveDriveId = (v) => {
+    saveField('bt_drive_client_id', v, setDriveId);
+    LS.set('bt_last_synced', String(Date.now()));
+    window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+    setSyncMessage('Synchronisation configurée ✓');
+    setTimeout(() => setSyncMessage(''), 3000);
+  };
 
   const toggleSync = () => {
     const next = !syncAuto;
@@ -854,10 +863,22 @@ function ArgileSettings() {
         <span style={{ fontStyle: 'italic' }}>Réglages</span>
       </h1>
 
+      {/* Message temporaire après configuration Google Drive */}
+      {syncMessage && (
+        <div style={{
+          marginBottom: 16, padding: '10px 16px', borderRadius: 12,
+          background: ARGILE.olive + '22', border: `1px solid ${ARGILE.olive}44`,
+          fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: ARGILE.olive,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>✓</span> {syncMessage}
+        </div>
+      )}
+
       <ArgileSettingsGroup label="Sauvegardes">
         <ArgileEditRow icon="↥" title="Google Drive" value={driveStatus}
           placeholder="Client ID Google OAuth"
-          onSave={v => saveField('bt_drive_client_id', v, setDriveId)} />
+          onSave={saveDriveId} />
         <ArgileSettingsRow icon="↻" title="Synchronisation auto"
           value={syncAuto ? 'Active' : 'Inactive'}
           toggle toggleValue={syncAuto} onToggle={toggleSync} />
