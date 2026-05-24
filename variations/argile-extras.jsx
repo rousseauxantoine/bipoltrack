@@ -788,36 +788,107 @@ function ArgileHistory() {
 // ══════════════════════════════════════════════════════════════════════
 // RÉGLAGES
 // ══════════════════════════════════════════════════════════════════════
+// ── Helpers localStorage ──────────────────────────────────────────
+const LS = {
+  get: (k, def = '') => { try { const v = localStorage.getItem(k); return v !== null ? v : def; } catch { return def; } },
+  set: (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} },
+  getJSON: (k, def = []) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } },
+};
+
 function ArgileSettings() {
+  const [patientName,   setPatientName]   = useStateAx(LS.get('bt_patient_name'));
+  const [patientDob,    setPatientDob]    = useStateAx(LS.get('bt_patient_dob'));
+  const [patientDoctor, setPatientDoctor] = useStateAx(LS.get('bt_patient_doctor'));
+  const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
+  const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
+  const [exportFeedback, setExportFeedback] = useStateAx('');
+
+  const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
+
+  const toggleSync = () => {
+    const next = !syncAuto;
+    setSyncAuto(next);
+    LS.set('bt_auto_backup', String(next));
+  };
+
+  const exportJSON = () => {
+    const data = {
+      entries: LS.getJSON('bt_entries'),
+      meds:    LS.getJSON('bt_meds'),
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `bipoltrack-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    setExportFeedback('json');
+    setTimeout(() => setExportFeedback(''), 2000);
+  };
+
+  const exportCSV = () => {
+    const entries = LS.getJSON('bt_entries');
+    const rows = [['date','humeur','energie','anxiete','sommeil','note']];
+    entries.forEach(e => rows.push([
+      e.date || '', e.mood ?? '', e.energy ?? '', e.anxiety ?? '', e.sleep ?? '',
+      (e.note || '').replace(/[\r\n,]/g, ' '),
+    ]));
+    const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `bipoltrack-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    setExportFeedback('csv');
+    setTimeout(() => setExportFeedback(''), 2000);
+  };
+
+  const lastSynced = LS.get('bt_last_synced');
+  const driveStatus = driveId
+    ? `ID configuré · ${lastSynced ? 'synchro ' + new Date(+lastSynced).toLocaleDateString('fr-FR') : 'jamais synchronisé'}`
+    : 'Non configuré';
+
   return (
-    <div style={{ padding: '20px 24px 0' }}>
+    <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 80 }}>
       <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Maison & maintenance</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '8px 0 24px', color: ARGILE.ink, fontWeight: 400 }}>
         <span style={{ fontStyle: 'italic' }}>Réglages</span>
       </h1>
 
       <ArgileSettingsGroup label="Sauvegardes">
-        <ArgileSettingsRow icon="↥" title="Google Drive" value="Connectée · Léa" trailing="modifier →" />
-        <ArgileSettingsRow icon="↻" title="Synchronisation auto" value="Active · dernière à 22h47" toggle={true} />
-        <ArgileSettingsRow icon="⤓" title="Exporter en JSON" value="Sauvegarde complète" />
-        <ArgileSettingsRow icon="⤓" title="Exporter en CSV" value="Pour tableur" last />
+        <ArgileEditRow icon="↥" title="Google Drive" value={driveStatus}
+          placeholder="Client ID Google OAuth"
+          onSave={v => saveField('bt_drive_client_id', v, setDriveId)} />
+        <ArgileSettingsRow icon="↻" title="Synchronisation auto"
+          value={syncAuto ? 'Active' : 'Inactive'}
+          toggle toggleValue={syncAuto} onToggle={toggleSync} />
+        <ArgileSettingsRow icon="⤓" title="Exporter en JSON" value="Sauvegarde complète"
+          trailing={exportFeedback === 'json' ? 'exporté ✓' : 'exporter →'}
+          onTrailing={exportJSON} />
+        <ArgileSettingsRow icon="⤓" title="Exporter en CSV" value="Pour tableur"
+          trailing={exportFeedback === 'csv' ? 'exporté ✓' : 'exporter →'}
+          onTrailing={exportCSV} last />
       </ArgileSettingsGroup>
 
-      <ArgileSettingsGroup label="Synthèse IA">
-        <ArgileSettingsRow icon="✦" title="Clé API Anthropic" value="sk-ant-…3f9a · enregistrée" trailing="modifier →" />
-        <ArgileSettingsRow icon="◍" title="Sources RSS" value="12 flux · 4 mis en avant" trailing="gérer →" last />
+      <ArgileSettingsGroup label="Sources d'information">
+        <ArgileSettingsRow icon="◍" title="Flux RSS" value="Configurés dans base-rss.md" last />
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="Cabinet médical">
-        <ArgileSettingsRow icon="✎" title="Mon nom" value="Léa Moreau" trailing="modifier →" />
-        <ArgileSettingsRow icon="◐" title="Date de naissance" value="14.03.1994" trailing="modifier →" />
-        <ArgileSettingsRow icon="✚" title="Médecin référent" value="Dr. Mercier · CH Bichat" trailing="modifier →" last />
+        <ArgileEditRow icon="✎" title="Mon nom"
+          value={patientName} placeholder="Prénom Nom"
+          onSave={v => saveField('bt_patient_name', v, setPatientName)} />
+        <ArgileEditRow icon="◐" title="Date de naissance"
+          value={patientDob} placeholder="JJ/MM/AAAA"
+          onSave={v => saveField('bt_patient_dob', v, setPatientDob)} />
+        <ArgileEditRow icon="✚" title="Médecin référent"
+          value={patientDoctor} placeholder="Dr. Nom · Établissement"
+          onSave={v => saveField('bt_patient_doctor', v, setPatientDoctor)} last />
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="À propos">
-        <ArgileSettingsRow icon="❀" title="Version" value="3.2.1 · build 142" />
-        <ArgileSettingsRow icon="?" title="Comment ça marche" trailing="lire →" />
-        <ArgileSettingsRow icon="✉" title="Écrire à l'équipe" trailing="ouvrir →" last />
+        <ArgileSettingsRow icon="❀" title="Version" value="1.0.0" />
+        <ArgileSettingsRow icon="?" title="Dépôt GitHub" trailing="ouvrir →"
+          onTrailing={() => window.open('https://github.com/rousseauxantoine/bipoltrack', '_blank')} last />
       </ArgileSettingsGroup>
 
       <p style={{ fontSize: 12, color: ARGILE.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
@@ -840,37 +911,71 @@ function ArgileSettingsGroup({ label, children }) {
   );
 }
 
-function ArgileSettingsRow({ icon, title, value, trailing, toggle, last }) {
-  const [on, setOn] = useStateAx(true);
+// Ligne avec icône à gauche, affichage d'une valeur statique / toggle / bouton trailing
+function ArgileSettingsRow({ icon, title, value, trailing, toggle, toggleValue, onToggle, onTrailing, last }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-      borderBottom: last ? 'none' : `1px solid ${ARGILE.border}`,
-    }}>
-      <div style={{
-        width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic',
-      }}>{icon}</div>
-      <div style={{ flex: 1 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: last ? 'none' : `1px solid ${ARGILE.border}` }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500 }}>{title}</div>
         {value && <div style={{ fontSize: 11, color: ARGILE.muted, marginTop: 2 }}>{value}</div>}
       </div>
       {toggle && (
-        <button onClick={() => setOn(o => !o)} style={{
-          width: 40, height: 24, borderRadius: 12,
-          background: on ? ARGILE.clay : ARGILE.sand2, border: 'none',
-          position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
-        }}>
-          <div style={{
-            position: 'absolute', top: 2, left: on ? 18 : 2, width: 20, height: 20,
-            borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-          }} />
+        <button onClick={onToggle} style={{ width: 40, height: 24, borderRadius: 12, background: toggleValue ? ARGILE.clay : ARGILE.sand2, border: 'none', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', top: 2, left: toggleValue ? 18 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
         </button>
       )}
       {trailing && (
-        <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.clay }}>{trailing}</span>
+        onTrailing
+          ? <button onClick={onTrailing} style={{ background: 'none', border: 'none', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.clay, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>{trailing}</button>
+          : <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{trailing}</span>
+      )}
+    </div>
+  );
+}
+
+// Ligne avec champ éditable inline (modifier / enregistrer / annuler)
+function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
+  const [editing, setEditing] = useStateAx(false);
+  const [input,   setInput]   = useStateAx(value || '');
+
+  // Sync si la valeur parente change (ex: chargement initial)
+  const { useEffect: useEffectAx2 } = React;
+  useEffectAx2(() => { if (!editing) setInput(value || ''); }, [value]);
+
+  const handleSave = () => { onSave(input.trim()); setEditing(false); };
+  const handleCancel = () => { setInput(value || ''); setEditing(false); };
+
+  return (
+    <div style={{ display: 'flex', alignItems: editing ? 'flex-start' : 'center', gap: 14, padding: '14px 16px', borderBottom: last ? 'none' : `1px solid ${ARGILE.border}` }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0, marginTop: editing ? 2 : 0 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500 }}>{title}</div>
+        {editing ? (
+          <div style={{ marginTop: 8 }}>
+            <input
+              autoFocus
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder={placeholder}
+              onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }}
+              style={{ width: '100%', border: `1.5px solid ${ARGILE.clay}`, borderRadius: 8, padding: '7px 10px', fontSize: 13, fontFamily: 'DM Sans, sans-serif', background: ARGILE.cream, color: ARGILE.ink, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button onClick={handleSave} style={{ flex: 1, padding: '6px 0', background: ARGILE.clay, color: ARGILE.paper, border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>Enregistrer</button>
+              <button onClick={handleCancel} style={{ flex: 1, padding: '6px 0', background: ARGILE.sand2, color: ARGILE.ink2, border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Annuler</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: value ? ARGILE.muted : ARGILE.border, marginTop: 2, fontStyle: value ? 'normal' : 'italic' }}>
+            {value || placeholder || '—'}
+          </div>
+        )}
+      </div>
+      {!editing && (
+        <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.clay, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          modifier →
+        </button>
       )}
     </div>
   );
