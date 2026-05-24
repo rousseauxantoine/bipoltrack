@@ -818,39 +818,51 @@ function ArgileSettings() {
     setTimeout(() => setExportFeedback(''), 2000);
   };
 
-  // ── Google Drive — OAuth token (flux implicite, popup) ──────────────
+  // ── Google Drive — OAuth token (flux implicite, popup + postMessage) ─
+  // redirect_uri fixe : <origin>/oauth.html  →  à enregistrer dans Google Cloud Console
   const getGoogleToken = () => new Promise((resolve, reject) => {
     const cached = sessionStorage.getItem('bt_google_token');
     const expiry  = sessionStorage.getItem('bt_google_token_expiry');
     if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
     if (!driveId) { reject(new Error('Client ID manquant')); return; }
 
+    const redirectUri = window.location.origin + '/oauth.html';
     const scope    = 'https://www.googleapis.com/auth/drive.file';
-    const base     = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
-    const authUrl  = `https://accounts.google.com/o/oauth2/v2/auth`
-      + `?client_id=${encodeURIComponent(driveId)}`
-      + `&redirect_uri=${encodeURIComponent(base)}`
-      + `&response_type=token`
-      + `&scope=${encodeURIComponent(scope)}`;
+    const authUrl  = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id='     + encodeURIComponent(driveId)
+      + '&redirect_uri='  + encodeURIComponent(redirectUri)
+      + '&response_type=token'
+      + '&scope='         + encodeURIComponent(scope);
 
     const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
     if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
 
-    const timer = setInterval(() => {
-      try {
-        if (popup.closed) { clearInterval(timer); reject(new Error('Fenêtre fermée')); return; }
-        const hash = popup.location.hash;
-        if (hash && hash.includes('access_token')) {
-          clearInterval(timer); popup.close();
-          const p   = new URLSearchParams(hash.slice(1));
-          const tok = p.get('access_token');
-          const exp = +(p.get('expires_in') || 3600);
-          sessionStorage.setItem('bt_google_token', tok);
-          sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
-          resolve(tok);
-        }
-      } catch (_) { /* cross-origin : en attente */ }
-    }, 400);
+    // Le token est transmis par oauth.html via postMessage
+    const onMsg = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const d = event.data;
+      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
+      window.removeEventListener('message', onMsg);
+      clearInterval(watchClose);
+      if (d.type === 'bt-oauth-token') {
+        const exp = +(d.expiresIn || 3600);
+        sessionStorage.setItem('bt_google_token', d.token);
+        sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
+        resolve(d.token);
+      } else {
+        reject(new Error(d.error || 'auth échouée'));
+      }
+    };
+    window.addEventListener('message', onMsg);
+
+    // Fallback si la fenêtre est fermée sans postMessage
+    const watchClose = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(watchClose);
+        window.removeEventListener('message', onMsg);
+        reject(new Error('Fenêtre fermée sans authentification'));
+      }
+    }, 600);
   });
 
   // ── Sauvegarder vers Drive ─────────────────────────────────────────

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>BipolTrack · Auth</title>
+<style>
+  body { margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh;
+    font-family: 'DM Sans', system-ui, sans-serif; background: #F8F0DC; color: #2B1810; }
+  p { font-size: 15px; opacity: 0.6; }
+</style>
+</head>
+<body>
+<p>Authentification en cours…</p>
+<script>
+  (function () {
+    var hash   = window.location.hash.slice(1);
+    var search = window.location.search.slice(1);
+    var params = new URLSearchParams(hash || search);
+
+    var token     = params.get('access_token');
+    var expiresIn = params.get('expires_in');
+    var error     = params.get('error');
+
+    if (window.opener) {
+      window.opener.postMessage(
+        token
+          ? { type: 'bt-oauth-token', token: token, expiresIn: expiresIn || '3600' }
+          : { type: 'bt-oauth-error', error: error || 'unknown' },
+        window.location.origin
+      );
+      window.close();
+    } else {
+      document.querySelector('p').textContent = 'Ferme cette fenêtre manuellement.';
+    }
+  })();
+</script>
+</body>
+</html>
