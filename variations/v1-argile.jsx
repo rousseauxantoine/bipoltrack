@@ -197,11 +197,12 @@ function ArgileShell({ children, active, onNav, hideHeader = false }) {
   );
 }
 
-function ArgilePhaseHeader({ phase, total = 3, date = 'Sam. 23 mai' }) {
+function ArgilePhaseHeader({ phase, total = 3, date }) {
+  const todayLabel = date || new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' });
   return (
     <div style={{ padding: '0 24px 18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 18 }}>
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase' }}>{date}</span>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase' }}>{todayLabel}</span>
         <div style={{ display: 'flex', gap: 4 }}>
           {Array.from({ length: total }, (_, i) => (
             <div key={i} style={{ width: 24, height: 3, borderRadius: 2, background: i < phase ? ARGILE.clay : ARGILE.border }} />
