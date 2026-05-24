@@ -472,6 +472,8 @@ const MED_COLORS = [ARGILE.clay, ARGILE.olive, '#7A6F2F', '#5C6A9E', '#8B5C5C'];
 
 function ArgileMeds() {
   const [meds, setMeds] = useStateAx(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false));
+  const [showModal, setShowModal] = useStateAx(false);
+  const [form, setForm] = useStateAx({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
 
   const formatStart = (s) => {
     if (!s) return '';
@@ -480,8 +482,67 @@ function ArgileMeds() {
     return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
   };
 
+  const saveMed = () => {
+    if (!form.name.trim()) return;
+    const newMed = { id: Date.now().toString(), name: form.name.trim(), dose: form.dose.trim(), qty: form.qty.trim(), freq: form.freq, notes: form.notes.trim(), start: form.start, active: true };
+    const all = [...LS.getJSON('bt_meds', []), newMed];
+    LS.set('bt_meds', JSON.stringify(all));
+    setMeds(all.filter(m => m.active !== false));
+    setShowModal(false);
+    setForm({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
+  };
+
+  const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, fontSize: 15, fontFamily: 'inherit', color: ARGILE.ink, boxSizing: 'border-box', outline: 'none' };
+  const labelStyle = { display: 'block', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: ARGILE.muted, marginBottom: 6 };
+
   return (
     <div style={{ padding: '20px 24px 0' }}>
+      {showModal && (
+        <div onClick={() => setShowModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(43,24,16,0.45)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0', padding: '24px 20px 36px', boxSizing: 'border-box' }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>Nouveau remède</p>
+            <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 26, color: ARGILE.ink, fontWeight: 400, margin: '0 0 20px' }}>Ajouter un traitement</h2>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Nom du médicament *</label>
+              <input style={inputStyle} placeholder="ex : Lithium, Dépakine…" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Dosage</label>
+                <input style={inputStyle} placeholder="500 mg" value={form.dose} onChange={e => setForm(f => ({ ...f, dose: e.target.value }))} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Quantité</label>
+                <input style={inputStyle} placeholder="2 cp" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Fréquence</label>
+              <select style={inputStyle} value={form.freq} onChange={e => setForm(f => ({ ...f, freq: e.target.value }))}>
+                {['1x/jour','2x/jour','3x/jour','au coucher','matin','matin+soir'].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Date de début</label>
+              <input type="date" style={inputStyle} value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} />
+            </div>
+            <div style={{ marginBottom: 22 }}>
+              <label style={labelStyle}>Notes (optionnel)</label>
+              <textarea style={{ ...inputStyle, height: 64, resize: 'none' }} placeholder="ex : à prendre avec de la nourriture…" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+
+            <button onClick={saveMed} style={{ width: '100%', padding: '16px', border: 'none', borderRadius: 14, background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18, cursor: 'pointer', marginBottom: 10 }}>
+              Enregistrer
+            </button>
+            <button onClick={() => setShowModal(false)} style={{ width: '100%', padding: '12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 14, background: 'transparent', color: ARGILE.ink2, fontSize: 15, cursor: 'pointer' }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
         <div>
           <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Les remèdes</p>
@@ -494,7 +555,7 @@ function ArgileMeds() {
         {meds.length === 0 ? 'Aucun traitement enregistré.' : `${meds.length} traitement${meds.length > 1 ? 's' : ''} en cours.`}
       </p>
 
-      <button style={{
+      <button onClick={() => setShowModal(true)} style={{
         marginBottom: 16, width: '100%', padding: '14px 18px', borderRadius: 14,
         border: `1.5px dashed ${ARGILE.muted}`, background: 'transparent',
         color: ARGILE.ink2, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
@@ -819,14 +880,15 @@ function ArgileSettings() {
   };
 
   // ── Google Drive — OAuth token (flux implicite, popup + postMessage) ─
-  // redirect_uri fixe : <origin>/oauth.html  →  à enregistrer dans Google Cloud Console
+  // redirect_uri : même dossier que index.html + oauth.html
+  // → fonctionne en local (localhost:8080) ET sur GitHub Pages (/bipoltrack/)
+  const redirectUri = window.location.href.replace(/[^/]*(\?.*)?$/, 'oauth.html');
+
   const getGoogleToken = () => new Promise((resolve, reject) => {
     const cached = sessionStorage.getItem('bt_google_token');
     const expiry  = sessionStorage.getItem('bt_google_token_expiry');
     if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
     if (!driveId) { reject(new Error('Client ID manquant')); return; }
-
-    const redirectUri = window.location.origin + '/oauth.html';
     const scope    = 'https://www.googleapis.com/auth/drive.file';
     const authUrl  = 'https://accounts.google.com/o/oauth2/v2/auth'
       + '?client_id='     + encodeURIComponent(driveId)
