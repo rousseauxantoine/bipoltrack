@@ -80,77 +80,78 @@ function ArgileEmpty({ onStart }) {
 // NEWS — synthèse IA + RSS
 // ══════════════════════════════════════════════════════════════════════
 function ArgileNews() {
-  const articles = [
-    { src: 'Le Monde · Santé', date: 'Il y a 3h', title: 'Trouble bipolaire : une étude française relance le débat sur le lithium chez les jeunes adultes', desc: 'Une cohorte de 1 200 patients suivis sur 8 ans montre une réduction de 38% des hospitalisations…' },
-    { src: 'Cerveau & Psycho',  date: 'Hier',     title: 'Sommeil et bipolarité : les chronotypes seraient plus prédictifs que l\'humeur', desc: 'Les chercheurs de l\'Inserm proposent un nouveau marqueur basé sur la régularité du coucher…' },
-    { src: 'Slate',             date: 'Hier',     title: 'Pourquoi le suivi quotidien change la donne — témoignages', desc: 'Six patients racontent comment tenir un journal d\'humeur a transformé leurs consultations…' },
-    { src: 'The Lancet Psych.', date: 'Avant-hier', title: 'Lamotrigine vs. lithium en monothérapie : nouveau méta-analyse', desc: '14 essais analysés, 4 800 patients. La supériorité du lithium se confirme sur la prévention…' },
-  ];
+  const cache = LS.getJSON('bt_news_cache', null);
+  const articles = (cache && cache.articles) || [];
+  const cacheDate = cache && cache.date
+    ? new Date(cache.date).toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })
+    : null;
+
+  const formatPubDate = (d) => {
+    if (!d) return '';
+    const dt = new Date(d);
+    if (isNaN(dt)) return '';
+    return dt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  };
 
   return (
-    <div style={{ padding: '20px 24px 0' }}>
+    <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 80 }}>
       <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>L'actu, en bref</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '8px 0 4px', color: ARGILE.ink, fontWeight: 400 }}>
         <span style={{ fontStyle: 'italic' }}>Aujourd'hui</span>, en somme.
       </h1>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '0 0 24px' }}>Sam. 24 mai · synthèse de 12 sources.</p>
+      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '0 0 24px' }}>
+        {cacheDate
+          ? `${cacheDate} · ${articles.length} article${articles.length > 1 ? 's' : ''}`
+          : 'Aucun article chargé.'}
+      </p>
 
-      {/* AI synthesis card */}
-      <div style={{
-        background: ARGILE.paper, borderRadius: 18, padding: '22px 22px',
-        border: `1px solid ${ARGILE.border}`, marginBottom: 24, position: 'relative',
-        boxShadow: '0 4px 14px rgba(43,24,16,0.06)',
-      }}>
+      {articles.length === 0 ? (
         <div style={{
-          position: 'absolute', top: -10, left: 22, padding: '3px 10px',
-          background: ARGILE.clay, borderRadius: 100,
-          fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.14em',
-          color: '#fff', textTransform: 'uppercase',
-        }}>Synthèse · IA</div>
-        <p style={{
-          fontFamily: 'Instrument Serif, serif', fontSize: 19, lineHeight: 1.45,
-          color: ARGILE.ink, margin: '6px 0 0', fontStyle: 'italic',
+          padding: '32px 24px', textAlign: 'center', borderRadius: 16,
+          border: `1.5px dashed ${ARGILE.border}`, background: ARGILE.paper, marginBottom: 24,
         }}>
-          « Cette semaine, deux études convergent sur la valeur du <strong style={{ color: ARGILE.clay, fontWeight: 500 }}>lithium</strong> comme stabilisateur de fond, particulièrement chez l'adulte jeune. Côté pratique, la <strong style={{ color: ARGILE.clay, fontWeight: 500 }}>régularité du sommeil</strong> émerge comme un meilleur prédicteur de rechute que l'humeur elle-même — une raison de plus de tenir ton carnet. »
-        </p>
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16,
-          paddingTop: 14, borderTop: `1px solid ${ARGILE.border}`,
-        }}>
-          <span style={{ fontSize: 11, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.08em' }}>
-            12 articles · 4 mis en avant
-          </span>
-          <button style={{
-            border: 'none', background: 'transparent', color: ARGILE.clay,
-            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 14, cursor: 'pointer',
-          }}>↻ Rafraîchir</button>
-        </div>
-      </div>
-
-      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 12 }}>
-        ─ articles ─
-      </div>
-
-      {articles.map((a, i) => (
-        <div key={i} style={{
-          padding: '16px 0', borderBottom: i < articles.length - 1 ? `1px solid ${ARGILE.border}` : 'none',
-          cursor: 'pointer',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <span style={{
-              fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.12em',
-              color: ARGILE.clay, textTransform: 'uppercase', padding: '2px 8px',
-              background: 'rgba(184,88,57,0.10)', borderRadius: 100,
-            }}>{a.src}</span>
-            <span style={{ fontSize: 11, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace' }}>{a.date}</span>
+          <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 22, color: ARGILE.muted, marginBottom: 8 }}>
+            Aucun article
           </div>
-          <h3 style={{
-            fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 1.25,
-            margin: '6px 0 6px', color: ARGILE.ink, fontWeight: 400,
-          }}>{a.title}</h3>
-          <p style={{ fontSize: 13, color: ARGILE.ink2, lineHeight: 1.5, margin: 0 }}>{a.desc}</p>
+          <div style={{ fontSize: 13, color: ARGILE.muted, lineHeight: 1.5 }}>
+            Les flux RSS sont configurés dans <code style={{ fontSize: 12 }}>base-rss.md</code>.<br />
+            Rafraîchis la page pour charger les derniers articles.
+          </div>
         </div>
-      ))}
+      ) : (
+        <>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 12 }}>
+            ─ articles ─
+          </div>
+          {articles.map((a, i) => (
+            <a key={i} href={a.link} target="_blank" rel="noopener" style={{
+              display: 'block', padding: '16px 0',
+              borderBottom: i < articles.length - 1 ? `1px solid ${ARGILE.border}` : 'none',
+              textDecoration: 'none', cursor: 'pointer',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <span style={{
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.12em',
+                  color: ARGILE.clay, textTransform: 'uppercase', padding: '2px 8px',
+                  background: 'rgba(184,88,57,0.10)', borderRadius: 100,
+                }}>{a.source}</span>
+                {a.pubDate && (
+                  <span style={{ fontSize: 11, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace' }}>
+                    {formatPubDate(a.pubDate)}
+                  </span>
+                )}
+              </div>
+              <h3 style={{
+                fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 1.25,
+                margin: '6px 0 6px', color: ARGILE.ink, fontWeight: 400,
+              }}>{a.title}</h3>
+              {a.description && (
+                <p style={{ fontSize: 13, color: ARGILE.ink2, lineHeight: 1.5, margin: 0 }}>{a.description}</p>
+              )}
+            </a>
+          ))}
+        </>
+      )}
     </div>
   );
 }
