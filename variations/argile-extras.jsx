@@ -266,7 +266,7 @@ function ArgileStatsDeep() {
   }
 
   return (
-    <div style={{ padding: '20px 20px 0' }}>
+    <div style={{ padding: '20px 20px 120px' }}>
       {editDate && (
         <ArgileEditEntry
           date={editDate}
