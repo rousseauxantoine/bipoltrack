@@ -82,7 +82,16 @@ C'est l'écran qui demandera à ton compte Google "Acceptez-vous que BipolTrack 
    
    Tu peux aussi ajouter `http://localhost:8080` ou similaire si tu testes l'app en local avec un mini-serveur.
 
-6. Laisse **"URI de redirection autorisés"** vide (on n'en a pas besoin avec le flux moderne).
+6. Dans **"URI de redirection autorisés"**, clique sur **"+ Ajouter un URI"** et ajoute :
+   ```
+   https://tonpseudo.github.io/bipoltrack/oauth.html
+   ```
+   *(Remplace `tonpseudo` par ton pseudo GitHub. Le chemin `/bipoltrack/oauth.html` est important — ne pas oublier le sous-dossier.)*
+
+   Si tu testes aussi en local, ajoute également :
+   ```
+   http://localhost:8080/oauth.html
+   ```
 7. Clique sur **"Créer"**.
 
 ---
@@ -145,7 +154,8 @@ Tu retrouveras tes sauvegardes dans Google Drive, dans un dossier nommé **`Bipo
 
 | Problème | Solution |
 |---|---|
-| "redirect_uri_mismatch" ou "origine non autorisée" | Vérifie que l'URL dans **Origines JavaScript autorisées** est exactement ton URL GitHub Pages, sans `/bipoltrack/`, sans `/` final. |
+| "redirect_uri_mismatch" | L'**URI de redirection** enregistrée dans Google Console ne correspond pas. Elle doit être `https://tonpseudo.github.io/bipoltrack/oauth.html` (avec le sous-dossier `/bipoltrack/`). Vérifie aussi que tu n'as pas mis `https://tonpseudo.github.io/oauth.html` sans le sous-dossier. |
+| "origine non autorisée" | Vérifie que l'URL dans **Origines JavaScript autorisées** est exactement `https://tonpseudo.github.io`, sans `/bipoltrack/`, sans `/` final. |
 | Format inattendu pour le Client ID | Le Client ID doit finir par `.apps.googleusercontent.com`. |
 | "Cette app n'est pas vérifiée" | Normal en mode Test. Clique sur "Paramètres avancés" puis "Continuer". |
 | L'écran de consentement réapparaît tous les 7 jours | Voir "Mode Test" ci-dessus. |
