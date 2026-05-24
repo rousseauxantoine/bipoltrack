@@ -510,12 +510,18 @@ function ArgileStatsDeep() {
 // ══════════════════════════════════════════════════════════════════════
 // SOINS (Traitements) — gestion des médicaments
 // ══════════════════════════════════════════════════════════════════════
+const MED_COLORS = [ARGILE.clay, ARGILE.olive, '#7A6F2F', '#5C6A9E', '#8B5C5C'];
+
 function ArgileMeds() {
-  const meds = [
-    { name: 'Lithium',    dose: '800 mg', when: 'au coucher',    adh: 96, started: 'Mars 2023', notes: '0,6 mmol/L à la dernière prise de sang.', color: ARGILE.clay },
-    { name: 'Dépakine',   dose: '500 mg', when: 'matin + soir',  adh: 92, started: 'Juin 2024',  notes: 'À prendre avec un repas.', color: ARGILE.olive },
-    { name: 'Lamictal',   dose: '100 mg', when: 'le matin',      adh: 88, started: 'Jan. 2025',  notes: 'Augmentation prévue le 1er juin.', color: '#7A6F2F' },
-  ];
+  const [meds, setMeds] = useStateAx(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false));
+
+  const formatStart = (s) => {
+    if (!s) return '';
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  };
+
   return (
     <div style={{ padding: '20px 24px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
@@ -526,7 +532,9 @@ function ArgileMeds() {
           </h1>
         </div>
       </div>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 0 20px' }}>3 traitements en cours.</p>
+      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 0 20px' }}>
+        {meds.length === 0 ? 'Aucun traitement enregistré.' : `${meds.length} traitement${meds.length > 1 ? 's' : ''} en cours.`}
+      </p>
 
       <button style={{
         marginBottom: 16, width: '100%', padding: '14px 18px', borderRadius: 14,
@@ -537,62 +545,66 @@ function ArgileMeds() {
         + ajouter un traitement
       </button>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-        {meds.map((m, i) => (
-          <div key={i} style={{
-            background: ARGILE.paper, borderRadius: 16, padding: '18px 20px',
-            border: `1px solid ${ARGILE.border}`, position: 'relative', overflow: 'hidden',
-          }}>
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: m.color }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <div>
-                <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, color: ARGILE.ink, fontWeight: 400, lineHeight: 1 }}>{m.name}</div>
-                <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 15, color: ARGILE.ink2, marginTop: 4 }}>
-                  {m.dose} · {m.when}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 28, color: m.color, lineHeight: 1, fontStyle: 'italic' }}>{m.adh}<span style={{ fontSize: 14 }}>%</span></div>
-                <div style={{ fontSize: 9, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', textTransform: 'uppercase' }}>adhérence</div>
-              </div>
-            </div>
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${ARGILE.border}`, display: 'flex', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Depuis</div>
-                <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{m.started}</div>
-              </div>
-              <button style={{
-                background: 'transparent', border: 'none', color: ARGILE.clay,
-                fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 14, cursor: 'pointer',
-              }}>modifier →</button>
-            </div>
-            {m.notes && (
-              <p style={{ fontSize: 12, color: ARGILE.ink2, margin: '10px 0 0', lineHeight: 1.45, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
-                « {m.notes} »
-              </p>
-            )}
+      {meds.length === 0 ? (
+        <div style={{
+          padding: '32px 24px', textAlign: 'center', borderRadius: 16,
+          border: `1.5px dashed ${ARGILE.border}`, background: ARGILE.paper, marginBottom: 24,
+        }}>
+          <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 22, color: ARGILE.muted, marginBottom: 8 }}>
+            Aucun traitement
           </div>
-        ))}
-      </div>
-
-      {/* Side effects in last 30 days */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 12 }}>
-          ─ effets ressentis · 30 j ─
+          <div style={{ fontSize: 13, color: ARGILE.muted }}>
+            Utilise le bouton ci-dessus pour ajouter tes médicaments.
+          </div>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {[
-            { l: 'Bouche sèche', n: 12 },
-            { l: 'Fatigue', n: 8 },
-            { l: 'Tremblements', n: 4 },
-          ].map((e, i) => (
-            <span key={i} style={{
-              padding: '6px 12px', borderRadius: 100, border: `1.5px solid ${ARGILE.border}`,
-              background: ARGILE.paper, fontSize: 13, color: ARGILE.ink2, fontFamily: 'DM Sans',
-            }}>{e.l} <span style={{ color: ARGILE.muted, marginLeft: 4 }}>× {e.n}</span></span>
-          ))}
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+          {meds.map((m, i) => {
+            const color = MED_COLORS[i % MED_COLORS.length];
+            const startLabel = formatStart(m.start);
+            const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
+            return (
+              <div key={m.id || i} style={{
+                background: ARGILE.paper, borderRadius: 16, padding: '18px 20px',
+                border: `1px solid ${ARGILE.border}`, position: 'relative', overflow: 'hidden',
+              }}>
+                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: color }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                    <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, color: ARGILE.ink, fontWeight: 400, lineHeight: 1 }}>{m.name}</div>
+                    {detail && (
+                      <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 15, color: ARGILE.ink2, marginTop: 4 }}>
+                        {detail}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {(startLabel || m.qty) && (
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${ARGILE.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {startLabel && (
+                      <div>
+                        <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Depuis</div>
+                        <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{startLabel}</div>
+                      </div>
+                    )}
+                    {m.qty && (
+                      <div>
+                        <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Quantité</div>
+                        <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{m.qty}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {m.notes && (
+                  <p style={{ fontSize: 12, color: ARGILE.ink2, margin: '10px 0 0', lineHeight: 1.45, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
+                    « {m.notes} »
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
 
       <button style={{
         width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
