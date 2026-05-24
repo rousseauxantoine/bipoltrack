@@ -30,6 +30,14 @@ function argileZoneOf(v) {
   return ARGILE_ZONES.find(z => v >= z.range[0] && v <= z.range[1]) || ARGILE_ZONES[2];
 }
 
+// ── Helpers localStorage (disponibles avant argile-extras.jsx) ────────
+const LS = {
+  get:     (k, def = '')  => { try { const v = localStorage.getItem(k); return v !== null ? v : def; } catch { return def; } },
+  set:     (k, v)         => { try { localStorage.setItem(k, String(v)); } catch {} },
+  getJSON: (k, def = [])  => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } },
+  setJSON: (k, v)         => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
 function ArgileMoodOrb({ value, onChange, finish = 'lisse' }) {
   const ref = useRefA(null);
   const [grab, setGrab] = useStateA(false);
@@ -232,7 +240,7 @@ function ArgileJournalMood({ orbFinish = 'lisse', onNext }) {
           </div>
         </div>
 
-        <button onClick={onNext} style={{
+        <button onClick={() => onNext(v)} style={{
           width: '100%', marginTop: 28, padding: '16px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
@@ -315,7 +323,7 @@ function ArgileChips({ items, selected, onToggle }) {
 function ArgileJournalCorps({ onNext }) {
   const [sleep, setSleep] = useStateA(7);
   const [anx, setAnx] = useStateA(3);
-  const [sym, setSym] = useStateA(['fatigue']);
+  const [sym, setSym] = useStateA([]);
   const toggle = (id) => setSym(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   return (
     <>
@@ -347,7 +355,7 @@ function ArgileJournalCorps({ onNext }) {
           />
         </div>
 
-        <button onClick={onNext} style={{
+        <button onClick={() => onNext(sleep, anx, sym)} style={{
           width: '100%', marginTop: 32, padding: '16px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
@@ -363,10 +371,11 @@ function ArgileJournalCorps({ onNext }) {
 }
 
 // ───── Journal · phase 3 — Mot ─────
-function ArgileJournalMot({ onNext }) {
-  const [meds, setMeds] = useStateA(['lith', 'depak']);
-  const toggle = (id) => setMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const [note, setNote] = useStateA("Bonne matinée. L'après-midi a glissé. J'ai marché 30min avec Léa, ça m'a sortie de ma tête.");
+function ArgileJournalMot({ onSave }) {
+  const lsMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
+  const [checkedMeds, setCheckedMeds] = useStateA(() => lsMeds.map(m => m.id));
+  const toggleMed = (id) => setCheckedMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const [note, setNote] = useStateA('');
   return (
     <>
       <ArgilePhaseHeader phase={3} />
@@ -379,36 +388,39 @@ function ArgileJournalMot({ onNext }) {
         <div style={{ marginBottom: 24 }}>
           <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic' }}>Traitements pris</span>
           <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 12px' }}>Tap pour cocher.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              { id: 'lith',  name: 'Lithium', dose: '800 mg · soir' },
-              { id: 'depak', name: 'Dépakine', dose: '500 mg · matin + soir' },
-              { id: 'lamic', name: 'Lamictal', dose: '100 mg · matin' },
-            ].map(m => {
-              const sel = meds.includes(m.id);
-              return (
-                <button key={m.id} onClick={() => toggle(m.id)} style={{
-                  display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-                  borderRadius: 14, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
-                  background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer',
-                  textAlign: 'left',
-                }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: '50%',
-                    border: `2px solid ${sel ? ARGILE.clay : ARGILE.muted}`,
-                    background: sel ? ARGILE.clay : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          {lsMeds.length === 0 ? (
+            <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.5 }}>
+              Aucun traitement configuré — rends-toi dans <em>Soins</em> pour en ajouter.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {lsMeds.map(m => {
+                const sel = checkedMeds.includes(m.id);
+                const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
+                return (
+                  <button key={m.id} onClick={() => toggleMed(m.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
+                    borderRadius: 14, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
+                    background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer',
+                    textAlign: 'left',
                   }}>
-                    {sel && <svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5 L4 7.5 L10 1" stroke="#FBF6EB" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, lineHeight: 1.1 }}>{m.name}</div>
-                    <div style={{ fontSize: 12, color: ARGILE.muted, marginTop: 2 }}>{m.dose}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                    <div style={{
+                      width: 22, height: 22, borderRadius: '50%',
+                      border: `2px solid ${sel ? ARGILE.clay : ARGILE.muted}`,
+                      background: sel ? ARGILE.clay : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      {sel && <svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5 L4 7.5 L10 1" stroke="#FBF6EB" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, lineHeight: 1.1 }}>{m.name}</div>
+                      {detail && <div style={{ fontSize: 12, color: ARGILE.muted, marginTop: 2 }}>{detail}</div>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div style={{ marginBottom: 8 }}>
@@ -418,11 +430,11 @@ function ArgileJournalMot({ onNext }) {
             width: '100%', minHeight: 110, padding: '14px 16px', borderRadius: 14,
             border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, resize: 'none',
             fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 1.5, color: ARGILE.ink,
-            fontStyle: 'italic', outline: 'none',
+            fontStyle: 'italic', outline: 'none', boxSizing: 'border-box',
           }} />
         </div>
 
-        <button onClick={onNext} style={{
+        <button onClick={() => onSave(checkedMeds, note)} style={{
           width: '100%', marginTop: 18, padding: '18px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 20, cursor: 'pointer',
@@ -602,16 +614,40 @@ function ArgileStats() {
 // ───── Master ─────
 function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const [screen, setScreen] = useStateA(initialScreen);
+  // Brouillon du journal : accumulé à travers les 3 étapes
+  const [journalDraft, setJournalDraft] = useStateA({ mood: 58, sleep: 7, anxiety: 3, symptoms: [] });
 
   // Apply tweaks override to palette/density (mutates window.ARGILE_LIVE for screens to read)
   const pal = tweaks.palette || 'argile';
   const dens = tweaks.density || 'aere';
   const finish = tweaks.finish || 'lisse';
 
+  // Sauvegarde de l'entrée dans bt_entries (même clé que la version legacy)
+  const saveEntry = ({ mood, sleep, anxiety, symptoms, meds, note }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = {
+      date: today,
+      mood,        // 0–100, échelle Argile (≠ legacy 1–10)
+      sleep,
+      anxiety,
+      symptoms,    // IDs des chips sélectionnées
+      meds,        // IDs des médicaments cochés
+      note,
+      effects: [],
+      menstruation: [],
+      ts: Date.now(),
+    };
+    const entries = LS.getJSON('bt_entries', []);
+    const idx = entries.findIndex(e => e.date === today);
+    if (idx >= 0) entries[idx] = entry;   // remplace si déjà noté aujourd'hui
+    else entries.unshift(entry);
+    LS.setJSON('bt_entries', entries);
+  };
+
   let body;
-  if (screen === 'journal')      body = <ArgileJournalMood orbFinish={finish} onNext={() => setScreen('corps')} />;
-  else if (screen === 'corps')   body = <ArgileJournalCorps onNext={() => setScreen('mot')} />;
-  else if (screen === 'mot')     body = <ArgileJournalMot onNext={() => setScreen('done')} />;
+  if (screen === 'journal')      body = <ArgileJournalMood orbFinish={finish} onNext={(mood) => { setJournalDraft(d => ({...d, mood})); setScreen('corps'); }} />;
+  else if (screen === 'corps')   body = <ArgileJournalCorps onNext={(sleep, anx, sym) => { setJournalDraft(d => ({...d, sleep, anxiety: anx, symptoms: sym})); setScreen('mot'); }} />;
+  else if (screen === 'mot')     body = <ArgileJournalMot onSave={(medsChecked, note) => { saveEntry({...journalDraft, meds: medsChecked, note}); setScreen('done'); }} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
   else if (screen === 'empty'   && window.ArgileEmpty)   body = <ArgileEmpty onStart={() => setScreen('journal')} />;
@@ -647,4 +683,4 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   );
 }
 
-Object.assign(window, { ArgileApp, ArgileShell, ArgileMoodOrb, ARGILE, ARGILE_ZONES, argileZoneOf });
+Object.assign(window, { ArgileApp, ArgileShell, ArgileMoodOrb, ARGILE, ARGILE_ZONES, argileZoneOf, LS });

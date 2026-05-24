@@ -801,12 +801,7 @@ function ArgileHistory() {
 // ══════════════════════════════════════════════════════════════════════
 // RÉGLAGES
 // ══════════════════════════════════════════════════════════════════════
-// ── Helpers localStorage ──────────────────────────────────────────
-const LS = {
-  get: (k, def = '') => { try { const v = localStorage.getItem(k); return v !== null ? v : def; } catch { return def; } },
-  set: (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} },
-  getJSON: (k, def = []) => { try { return JSON.parse(localStorage.getItem(k)) || def; } catch { return def; } },
-};
+// LS est défini dans v1-argile.jsx (chargé avant ce fichier)
 
 function ArgileSettings() {
   const [patientName,   setPatientName]   = useStateAx(LS.get('bt_patient_name'));
