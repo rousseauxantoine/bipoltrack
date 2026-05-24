@@ -30,6 +30,23 @@ function argileZoneOf(v) {
   return ARGILE_ZONES.find(z => v >= z.range[0] && v <= z.range[1]) || ARGILE_ZONES[2];
 }
 
+// ── Options des 3 dimensions du Journal ──────────────────────────────
+const ARGILE_HUMEUR_OPTS = [
+  { id: 'tristesse', label: 'Tristesse',            moodVal: 25, color: '#9B7A7A', bg: 'rgba(155,122,122,0.08)' },
+  { id: 'sérénité',  label: 'Sérénité',             moodVal: 50, color: '#AE9F8C', bg: 'rgba(174,159,140,0.10)' },
+  { id: 'euphorie',  label: 'Euphorie',              moodVal: 82, color: '#B85839', bg: 'rgba(184,88,57,0.10)'  },
+];
+const ARGILE_PENSEES_OPTS = [
+  { id: 'confusion', label: 'Confusion · Lenteur',  color: '#9B7A7A', bg: 'rgba(155,122,122,0.08)' },
+  { id: 'clarté',    label: 'Esprit clair',          color: '#AE9F8C', bg: 'rgba(174,159,140,0.10)' },
+  { id: 'profusion', label: 'Profusion · Obsession', color: '#B85839', bg: 'rgba(184,88,57,0.10)'  },
+];
+const ARGILE_ENERGIE_OPTS = [
+  { id: 'épuisement', label: 'Épuisement',           color: '#9B7A7A', bg: 'rgba(155,122,122,0.08)' },
+  { id: 'bien-être',  label: 'Bien-être',             color: '#AE9F8C', bg: 'rgba(174,159,140,0.10)' },
+  { id: 'agitation',  label: 'Agitation',             color: '#B85839', bg: 'rgba(184,88,57,0.10)'  },
+];
+
 // ── Helpers localStorage (disponibles avant argile-extras.jsx) ────────
 const LS = {
   get:     (k, def = '')  => { try { const v = localStorage.getItem(k); return v !== null ? v : def; } catch { return def; } },
@@ -213,45 +230,68 @@ function ArgilePhaseHeader({ phase, total = 3, date }) {
   );
 }
 
+// ───── Carte de sélection d'état (partagée entre les 3 phases) ─────
+function ArgileStateCard({ opt, selected, onSelect }) {
+  return (
+    <button onClick={onSelect} style={{
+      width: '100%', padding: '22px 24px', borderRadius: 18, cursor: 'pointer',
+      border: `1.5px solid ${selected ? opt.color : ARGILE.border}`,
+      background: selected ? opt.bg : ARGILE.paper,
+      textAlign: 'left', transition: 'all 0.18s',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      boxShadow: selected ? `0 4px 12px ${opt.color}22` : 'none',
+    }}>
+      <span style={{
+        fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+        fontSize: 28, color: selected ? opt.color : ARGILE.ink, lineHeight: 1.1,
+      }}>
+        {opt.label}
+      </span>
+      <div style={{
+        width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+        border: `2px solid ${selected ? opt.color : ARGILE.border}`,
+        background: selected ? opt.color : 'transparent',
+        transition: 'all 0.18s',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {selected && (
+          <svg width="10" height="8" viewBox="0 0 10 8">
+            <path d="M1 4L3.5 6.5L9 1" stroke={ARGILE.paper} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </div>
+    </button>
+  );
+}
+
+const JOURNAL_BTN = (disabled) => ({
+  width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
+  background: disabled ? ARGILE.sand2 : ARGILE.ink,
+  color: disabled ? ARGILE.muted : ARGILE.paper,
+  fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18,
+  cursor: disabled ? 'default' : 'pointer', transition: 'all 0.18s',
+});
+
 // ───── Journal · phase 1 — Humeur ─────
-function ArgileJournalMood({ orbFinish = 'lisse', onNext }) {
-  const [v, setV] = useStateA(58);
-  const zone = argileZoneOf(v);
+function ArgileJournalHumeur({ onNext }) {
+  const [v, setV] = useStateA(null);
   return (
     <>
       <ArgilePhaseHeader phase={1} />
       <div style={{ padding: '0 24px' }}>
         <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>01 — l'humeur</p>
-        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 6px', color: ARGILE.ink, fontWeight: 400 }}>
-          Où es-tu, <span style={{ fontStyle: 'italic' }}>aujourd'hui</span> ?
+        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
+          Comment te <span style={{ fontStyle: 'italic' }}>sens-tu ?</span>
         </h1>
-        <p style={{ fontSize: 14, color: ARGILE.ink2, lineHeight: 1.5, margin: '0 0 28px', maxWidth: 280 }}>
-          Glisse l'orbe sans réfléchir. Pas une note. Juste un endroit.
-        </p>
-
-        <ArgileMoodOrb value={v} onChange={setV} finish={orbFinish} />
-
-        <div style={{
-          marginTop: 32, padding: 20, background: ARGILE.paper, borderRadius: 16,
-          border: `1px solid ${ARGILE.border}`,
-        }}>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.12em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 6 }}>Aujourd'hui · {zone.label.toLowerCase()}</div>
-          <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, fontStyle: 'italic', color: ARGILE.ink, lineHeight: 1.2 }}>
-            « Un {zone.desc}. »
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+          {ARGILE_HUMEUR_OPTS.map(opt => (
+            <ArgileStateCard key={opt.id} opt={opt} selected={v === opt.id} onSelect={() => setV(opt.id)} />
+          ))}
         </div>
-
-        <button onClick={() => onNext(v)} style={{
-          width: '100%', marginTop: 28, padding: '16px 20px', border: 'none', borderRadius: 100,
-          background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
-          fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
-        }}>
-          Continuer — le corps  →
+        <button onClick={() => v && onNext(v)} style={JOURNAL_BTN(!v)}>
+          Continuer — les pensées →
         </button>
-
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>
-          Étape 1 sur 3
-        </p>
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>Étape 1 sur 3</p>
       </div>
     </>
   );
@@ -321,58 +361,34 @@ function ArgileChips({ items, selected, onToggle }) {
   );
 }
 
-function ArgileJournalCorps({ onNext }) {
-  const [sleep, setSleep] = useStateA(7);
-  const [anx, setAnx] = useStateA(3);
-  const [sym, setSym] = useStateA([]);
-  const toggle = (id) => setSym(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+// ───── Journal · phase 2 — Pensées ─────
+function ArgileJournalPensees({ onNext }) {
+  const [v, setV] = useStateA(null);
   return (
     <>
       <ArgilePhaseHeader phase={2} />
       <div style={{ padding: '0 24px' }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>02 — le corps</p>
-        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 40, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
-          Ton corps, <span style={{ fontStyle: 'italic' }}>en bref</span>.
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>02 — les pensées</p>
+        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
+          Ton <span style={{ fontStyle: 'italic' }}>esprit</span> ?
         </h1>
-
-        <ArgileSlider label="Sommeil" value={sleep} onChange={setSleep} suffix="h" leftLabel="0h" rightLabel="12h" />
-        <ArgileSlider label="Anxiété" value={anx} onChange={setAnx} min={0} max={10} suffix="/10" leftLabel="Calme" rightLabel="Intense" />
-
-        <div style={{ marginTop: 8, marginBottom: 8 }}>
-          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic' }}>Symptômes</span>
-          <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 14px' }}>Sans jugement. Cocher ce qui se présente.</p>
-          <ArgileChips
-            items={[
-              { id: 'agit',  label: 'Agitation' },
-              { id: 'fatigue', label: 'Fatigue' },
-              { id: 'irrit',  label: 'Irritabilité' },
-              { id: 'rapide', label: 'Idées rapides' },
-              { id: 'concentr', label: 'Concentration' },
-              { id: 'isol',  label: 'Retrait' },
-              { id: 'impuls', label: 'Impulsivité' },
-              { id: 'pleurs', label: 'Pleurs' },
-            ]}
-            selected={sym} onToggle={toggle}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+          {ARGILE_PENSEES_OPTS.map(opt => (
+            <ArgileStateCard key={opt.id} opt={opt} selected={v === opt.id} onSelect={() => setV(opt.id)} />
+          ))}
         </div>
-
-        <button onClick={() => onNext(sleep, anx, sym)} style={{
-          width: '100%', marginTop: 32, padding: '16px 20px', border: 'none', borderRadius: 100,
-          background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
-          fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
-        }}>
-          Continuer — le mot  →
+        <button onClick={() => v && onNext(v)} style={JOURNAL_BTN(!v)}>
+          Continuer — l'énergie →
         </button>
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>
-          Étape 2 sur 3
-        </p>
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>Étape 2 sur 3</p>
       </div>
     </>
   );
 }
 
-// ───── Journal · phase 3 — Mot ─────
-function ArgileJournalMot({ onSave }) {
+// ───── Journal · phase 3 — Énergie ─────
+function ArgileJournalEnergie({ onSave }) {
+  const [v, setV] = useStateA(null);
   const lsMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
   const [checkedMeds, setCheckedMeds] = useStateA(() => lsMeds.map(m => m.id));
   const toggleMed = (id) => setCheckedMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -381,13 +397,19 @@ function ArgileJournalMot({ onSave }) {
     <>
       <ArgilePhaseHeader phase={3} />
       <div style={{ padding: '0 24px' }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>03 — le mot</p>
-        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 40, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
-          Un dernier <span style={{ fontStyle: 'italic' }}>geste</span>.
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>03 — l'énergie</p>
+        <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 44, lineHeight: 1.0, margin: '8px 0 28px', color: ARGILE.ink, fontWeight: 400 }}>
+          Ton <span style={{ fontStyle: 'italic' }}>élan</span> ?
         </h1>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+          {ARGILE_ENERGIE_OPTS.map(opt => (
+            <ArgileStateCard key={opt.id} opt={opt} selected={v === opt.id} onSelect={() => setV(opt.id)} />
+          ))}
+        </div>
 
+        {/* Traitements */}
         <div style={{ marginBottom: 24 }}>
-          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic' }}>Traitements pris</span>
+          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Traitements pris</span>
           <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 12px' }}>Tap pour cocher.</p>
           {lsMeds.length === 0 ? (
             <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.5 }}>
@@ -402,8 +424,7 @@ function ArgileJournalMot({ onSave }) {
                   <button key={m.id} onClick={() => toggleMed(m.id)} style={{
                     display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
                     borderRadius: 14, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
-                    background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer',
-                    textAlign: 'left',
+                    background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer', textAlign: 'left',
                   }}>
                     <div style={{
                       width: 22, height: 22, borderRadius: '50%',
@@ -424,25 +445,25 @@ function ArgileJournalMot({ onSave }) {
           )}
         </div>
 
+        {/* Note libre */}
         <div style={{ marginBottom: 8 }}>
-          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic' }}>Une note ?</span>
+          <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Une note ?</span>
           <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 10px' }}>Optionnel. Ce qui te traverse.</p>
           <textarea value={note} onChange={(e) => setNote(e.target.value)} style={{
-            width: '100%', minHeight: 110, padding: '14px 16px', borderRadius: 14,
+            width: '100%', minHeight: 100, padding: '14px 16px', borderRadius: 14,
             border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, resize: 'none',
             fontFamily: 'Instrument Serif, serif', fontSize: 18, lineHeight: 1.5, color: ARGILE.ink,
             fontStyle: 'italic', outline: 'none', boxSizing: 'border-box',
           }} />
         </div>
 
-        <button onClick={() => onSave(checkedMeds, note)} style={{
-          width: '100%', marginTop: 18, padding: '18px 20px', border: 'none', borderRadius: 100,
-          background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
-          fontStyle: 'italic', fontSize: 20, cursor: 'pointer',
-          boxShadow: '0 6px 16px rgba(184,88,57,0.25)',
+        <button onClick={() => v && onSave(v, checkedMeds, note)} style={{
+          ...JOURNAL_BTN(!v), marginTop: 18, padding: '18px 20px', fontSize: 20,
+          ...(v ? { background: ARGILE.clay, boxShadow: '0 6px 16px rgba(184,88,57,0.25)' } : {}),
         }}>
           Fermer la journée
         </button>
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: ARGILE.muted }}>Étape 3 sur 3</p>
       </div>
     </>
   );
@@ -616,7 +637,7 @@ function ArgileStats() {
 function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const [screen, setScreen] = useStateA(initialScreen);
   // Brouillon du journal : accumulé à travers les 3 étapes
-  const [journalDraft, setJournalDraft] = useStateA({ mood: 58, sleep: 7, anxiety: 3, symptoms: [] });
+  const [journalDraft, setJournalDraft] = useStateA({ humeur: null, pensees: null });
   const [restoreData, setRestoreData] = useStateA(null);
 
   // Écouter les demandes de restauration (conflit de données Drive détecté)
@@ -634,15 +655,15 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const finish = tweaks.finish || 'lisse';
 
   // Sauvegarde de l'entrée dans bt_entries (même clé que la version legacy)
-  const saveEntry = ({ mood, sleep, anxiety, symptoms, meds, note }) => {
+  const saveEntry = ({ humeur, pensees, energie, meds, note }) => {
+    const moodVal = (ARGILE_HUMEUR_OPTS.find(o => o.id === humeur) || ARGILE_HUMEUR_OPTS[1]).moodVal;
     const today = new Date().toISOString().slice(0, 10);
     const entry = {
       date: today,
-      mood,        // 0–100, échelle Argile (≠ legacy 1–10)
-      sleep,
-      anxiety,
-      symptoms,    // IDs des chips sélectionnées
-      meds,        // IDs des médicaments cochés
+      humeur, pensees, energie,
+      mood: moodVal,   // rétrocompat graphiques/calendrier
+      sleep: null, anxiety: null, symptoms: [],
+      meds,
       note,
       effects: [],
       menstruation: [],
@@ -664,9 +685,9 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   };
 
   let body;
-  if (screen === 'journal')      body = <ArgileJournalMood orbFinish={finish} onNext={(mood) => { setJournalDraft(d => ({...d, mood})); setScreen('corps'); }} />;
-  else if (screen === 'corps')   body = <ArgileJournalCorps onNext={(sleep, anx, sym) => { setJournalDraft(d => ({...d, sleep, anxiety: anx, symptoms: sym})); setScreen('mot'); }} />;
-  else if (screen === 'mot')     body = <ArgileJournalMot onSave={(medsChecked, note) => { saveEntry({...journalDraft, meds: medsChecked, note}); setScreen('done'); }} />;
+  if (screen === 'journal')      body = <ArgileJournalHumeur onNext={(h) => { setJournalDraft(d => ({...d, humeur: h})); setScreen('pensees'); }} />;
+  else if (screen === 'pensees') body = <ArgileJournalPensees onNext={(p) => { setJournalDraft(d => ({...d, pensees: p})); setScreen('energie'); }} />;
+  else if (screen === 'energie') body = <ArgileJournalEnergie onSave={(e, meds, note) => { saveEntry({...journalDraft, energie: e, meds, note}); setScreen('done'); }} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
   else if (screen === 'empty'   && window.ArgileEmpty)   body = <ArgileEmpty onStart={() => setScreen('journal')} />;
@@ -680,7 +701,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
 
   // Group journal sub-screens under "journal" tab; report/history/settings under their nearest tab
   let active;
-  if (['corps','mot','done','journal','empty'].includes(screen)) active = 'journal';
+  if (['pensees','energie','done','journal','empty'].includes(screen)) active = 'journal';
   else if (screen === 'history' || screen === 'stats' || screen === 'stats-deep') active = 'stats';
   else if (screen === 'meds' || screen === 'report') active = 'meds';
   else if (screen === 'news') active = 'news';
