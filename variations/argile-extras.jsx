@@ -974,14 +974,14 @@ function ArgileSettings() {
           onSave={saveDriveId} />
         {driveId && (
           <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
-            value="Envoie les données vers Drive"
-            trailing={backupFeedback || 'sauvegarder →'}
+            value={backupFeedback || 'Envoie les données vers Drive'}
+            trailing={backupFeedback ? undefined : 'sauvegarder →'}
             onTrailing={backupFeedback ? undefined : saveNow} />
         )}
         <ArgileSettingsRow icon="↻" title="Synchronisation auto"
-          value={syncAuto ? 'Active' : 'Inactive'}
+          value={syncFeedback || (syncAuto ? 'Active' : 'Inactive')}
           toggle toggleValue={syncAuto} onToggle={toggleSync}
-          trailing={driveId ? (syncFeedback || 'syncer →') : undefined}
+          trailing={driveId && !syncFeedback ? 'syncer →' : undefined}
           onTrailing={driveId && !syncFeedback ? syncFromDrive : undefined} />
         <ArgileSettingsRow icon="⤓" title="Exporter en JSON" value="Sauvegarde complète"
           trailing={exportFeedback === 'json' ? 'exporté ✓' : 'exporter →'}
@@ -1034,13 +1034,14 @@ function ArgileSettingsGroup({ label, children }) {
 }
 
 // Ligne avec icône à gauche, affichage d'une valeur statique / toggle / bouton trailing
-function ArgileSettingsRow({ icon, title, value, trailing, toggle, toggleValue, onToggle, onTrailing, last }) {
+function ArgileSettingsRow({ icon, title, value, valueColor, trailing, toggle, toggleValue, onToggle, onTrailing, last }) {
+  const vColor = valueColor || (value && value.startsWith('erreur') ? ARGILE.clay : value && value.endsWith('✓') ? ARGILE.olive : ARGILE.muted);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: last ? 'none' : `1px solid ${ARGILE.border}` }}>
       <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0 }}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500 }}>{title}</div>
-        {value && <div style={{ fontSize: 11, color: ARGILE.muted, marginTop: 2 }}>{value}</div>}
+        {value && <div style={{ fontSize: 11, color: vColor, marginTop: 2 }}>{value}</div>}
       </div>
       {toggle && (
         <button onClick={onToggle} style={{ width: 40, height: 24, borderRadius: 12, background: toggleValue ? ARGILE.clay : ARGILE.sand2, border: 'none', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
