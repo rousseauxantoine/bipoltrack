@@ -30,6 +30,63 @@ function argileZoneOf(v) {
   return ARGILE_ZONES.find(z => v >= z.range[0] && v <= z.range[1]) || ARGILE_ZONES[2];
 }
 
+// ── Stats & streak helpers ─────────────────────────────────────────────
+// Toujours travailler en UTC pour rester cohérent avec saveEntry
+// (qui utilise new Date().toISOString().slice(0,10))
+const MS_PER_DAY = 86400000;
+function utcDayStr(offsetDays = 0) {
+  const todayUTC = new Date().toISOString().slice(0, 10);
+  if (offsetDays === 0) return todayUTC;
+  return new Date(new Date(todayUTC + 'T00:00:00Z').getTime() - offsetDays * MS_PER_DAY)
+    .toISOString().slice(0, 10);
+}
+
+function computeStreak(entries) {
+  const dateSet = new Set(entries.map(e => e.date));
+  let streak = 0;
+  let offset = 0;
+  while (dateSet.has(utcDayStr(offset))) {
+    streak++;
+    offset++;
+  }
+  return streak;
+}
+
+// Normalise mood : legacy 1-10 → ×10, redesign 0-100 → tel quel
+function normMoodTo100(entry) {
+  const m = entry.mood;
+  if (m == null) return null;
+  return m <= 10 ? Math.round(m * 10) : m;
+}
+
+function computeStats30(entries) {
+  const days30 = [];
+  for (let i = 29; i >= 0; i--) {
+    const key = utcDayStr(i);
+    days30.push({ key, entry: entries.find(e => e.date === key) || null });
+  }
+  const withMood = days30.filter(d => d.entry && normMoodTo100(d.entry) != null);
+  const moods = withMood.map(d => normMoodTo100(d.entry));
+  const sleeps = days30.filter(d => d.entry && d.entry.sleep != null).map(d => d.entry.sleep);
+
+  const sorted = [...moods].sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+  const medianZone = median != null ? argileZoneOf(median) : null;
+  const sleepAvg = sleeps.length
+    ? (sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1).replace('.', ',')
+    : null;
+
+  const sparkline = days30.map(d => d.entry ? normMoodTo100(d.entry) : null);
+  const total = withMood.length || 1;
+  const zoneCounts = ARGILE_ZONES.map(z => ({
+    zone: z.label, color: z.color,
+    days: moods.filter(v => argileZoneOf(v).id === z.id).length,
+    total,
+  }));
+
+  return { sparkline, medianZone, sleepAvg, zoneCounts, recordedDays: withMood.length };
+}
+
 // ── Options des 3 dimensions du Journal ──────────────────────────────
 const ARGILE_HUMEUR_OPTS = [
   { id: 'tristesse', label: 'Tristesse',            moodVal: 25, color: '#9B7A7A', bg: 'rgba(155,122,122,0.08)' },
@@ -350,7 +407,7 @@ function ArgileJournalSaisie({ onNext }) {
         </div>
       </div>
 
-      <ArgileSnapSlider dimLabel="01 — l'humeur"    opts={ARGILE_HUMEUR_OPTS}  value={humeur}  onChange={setHumeur}  />
+      <ArgileSnapSlider dimLabel="01 — l'humeur" opts={ARGILE_HUMEUR_OPTS} value={humeur} onChange={setHumeur} mascots={['assets/mascotte-sombre.png', 'assets/mascotte-stable.png', 'assets/mascotte-brulant.png']} />
       <ArgileSnapSlider dimLabel="02 — les pensées" opts={ARGILE_PENSEES_OPTS} value={pensees} onChange={setPensees} />
       <ArgileSnapSlider dimLabel="03 — l'énergie"   opts={ARGILE_ENERGIE_OPTS} value={energie} onChange={setEnergie} />
 
@@ -554,6 +611,21 @@ function ArgileChips({ items, selected, onToggle }) {
 
 // ───── Done · le retour récompense ─────
 function ArgileDone() {
+  const now = new Date();
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const dateLabel = cap(now.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' }));
+  const timeLabel = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  const entries = LS.getJSON('bt_entries', []);
+  const streak = computeStreak(entries);
+  const streakMsg = streak >= 2
+    ? `${streak} jours d'affilée. Ta courbe se dessine.`
+    : streak === 1
+    ? `Première entrée de la série.`
+    : `Première entrée notée.`;
+  const badgeLabel = streak >= 1
+    ? `${streak} jour${streak > 1 ? 's' : ''} · série en cours`
+    : `Série lancée`;
+
   return (
     <div style={{
       width: '100%', height: '100%', background: `radial-gradient(ellipse at 50% 30%, ${ARGILE.cream} 0%, ${ARGILE.sand} 70%)`,
@@ -618,20 +690,20 @@ function ArgileDone() {
 
       <div style={{ position: 'absolute', bottom: 100, left: 0, right: 0, padding: '0 32px', textAlign: 'center' }}>
         <p className="argile-fade-2" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.18em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>
-          Sam. 23 mai · 23h12
+          {dateLabel} · {timeLabel}
         </p>
         <h1 className="argile-fade-2" style={{ fontFamily: 'Instrument Serif, serif', fontSize: 56, lineHeight: 1.0, margin: '14px 0 18px', color: ARGILE.ink, fontWeight: 400 }}>
           <span style={{ fontStyle: 'italic' }}>Pris.</span>
         </h1>
         <p className="argile-fade-3" style={{ fontSize: 15, lineHeight: 1.55, color: ARGILE.ink2, margin: '0 auto 28px', maxWidth: 280 }}>
-          14 jours d'affilée. Ta courbe se dessine. Tu peux refermer le téléphone.
+          {streakMsg} Tu peux refermer le téléphone.
         </p>
         <div className="argile-fade-4" style={{
           display: 'inline-flex', gap: 8, padding: '8px 16px', borderRadius: 100,
           background: ARGILE.paper, border: `1px solid ${ARGILE.border}`, alignItems: 'center',
         }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: ARGILE.olive }} />
-          <span style={{ fontSize: 12, color: ARGILE.ink2, fontWeight: 500 }}>14 jours · série en cours</span>
+          <span style={{ fontSize: 12, color: ARGILE.ink2, fontWeight: 500 }}>{badgeLabel}</span>
         </div>
       </div>
     </div>
@@ -640,18 +712,32 @@ function ArgileDone() {
 
 // ───── Carnet (stats simplifié) ─────
 function ArgileStats() {
-  // Build small 30-day strip
-  const days = Array.from({ length: 30 }, (_, i) => {
-    const r = Math.sin(i * 0.4) * 30 + Math.cos(i * 0.27) * 15 + 50 + (i > 22 ? 8 : 0);
-    return Math.max(5, Math.min(95, Math.round(r)));
-  });
+  const entries = LS.getJSON('bt_entries', []);
+  const { sparkline, medianZone, sleepAvg, zoneCounts, recordedDays } = computeStats30(entries);
+
+  const now = new Date();
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const monthLabel = cap(now.toLocaleDateString('fr-FR', { month: 'long' }));
+  const yearLabel = now.getFullYear();
+
+  const d30 = new Date(now); d30.setDate(d30.getDate() - 29);
+  const d15 = new Date(now); d15.setDate(d15.getDate() - 14);
+  const fmt = d => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+
+  const medianLabel = medianZone ? medianZone.label : '—';
+  const medianColor = medianZone ? medianZone.color : ARGILE.muted;
+
+  const activZones = zoneCounts.filter(z => z.days > 0);
+
   return (
     <div style={{ padding: '20px 24px 0' }}>
       <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Le carnet</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '8px 0 4px', color: ARGILE.ink, fontWeight: 400 }}>
-        <span style={{ fontStyle: 'italic' }}>Mai</span> 2026
+        <span style={{ fontStyle: 'italic' }}>{monthLabel}</span> {yearLabel}
       </h1>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '0 0 24px' }}>30 dernières journées.</p>
+      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '0 0 24px' }}>
+        {recordedDays > 0 ? `${recordedDays} entrée${recordedDays > 1 ? 's' : ''} ces 30 derniers jours.` : 'Aucune entrée ces 30 derniers jours.'}
+      </p>
 
       {/* sparkline éditoriale */}
       <div style={{
@@ -661,40 +747,39 @@ function ArgileStats() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.12em', color: ARGILE.muted, textTransform: 'uppercase' }}>Médiane 30j</div>
-            <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 32, color: ARGILE.clay, lineHeight: 1, marginTop: 4, fontStyle: 'italic' }}>Stable</div>
+            <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 32, color: medianColor, lineHeight: 1, marginTop: 4, fontStyle: 'italic' }}>{medianLabel}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.12em', color: ARGILE.muted, textTransform: 'uppercase' }}>Sommeil moy.</div>
-            <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 32, color: ARGILE.ink, lineHeight: 1, marginTop: 4 }}>7,2<span style={{ fontSize: 16, color: ARGILE.muted }}>h</span></div>
+            <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 32, color: ARGILE.ink, lineHeight: 1, marginTop: 4 }}>
+              {sleepAvg ? <>{sleepAvg}<span style={{ fontSize: 16, color: ARGILE.muted }}>h</span></> : <span style={{ fontSize: 20, color: ARGILE.muted }}>—</span>}
+            </div>
           </div>
         </div>
 
         <svg viewBox="0 0 300 90" style={{ width: '100%', height: 90 }}>
           <line x1="0" y1="45" x2="300" y2="45" stroke={ARGILE.border} strokeDasharray="2 4" />
-          {days.map((d, i) => {
-            const x = (i / (days.length - 1)) * 300;
-            const y = 90 - (d / 100) * 80 - 5;
-            return <circle key={i} cx={x} cy={y} r={i === days.length - 1 ? 4 : 2.4} fill={ARGILE.clay} opacity={0.5 + (i / days.length) * 0.5} />;
-          })}
-          <polyline
-            points={days.map((d, i) => `${(i / (days.length - 1)) * 300},${90 - (d / 100) * 80 - 5}`).join(' ')}
-            fill="none" stroke={ARGILE.clay} strokeWidth="1.5" opacity="0.4"
-          />
+          {(() => {
+            const pts = sparkline
+              .map((v, i) => v != null ? { x: (i / 29) * 300, y: 90 - (v / 100) * 80 - 5, i } : null)
+              .filter(Boolean);
+            if (pts.length === 0) return (
+              <text x="150" y="50" textAnchor="middle" fontSize="11" fill={ARGILE.muted} fontFamily="JetBrains Mono, monospace">Aucune donnée</text>
+            );
+            return <>
+              {pts.length > 1 && <polyline points={pts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={ARGILE.clay} strokeWidth="1.5" opacity="0.4" />}
+              {pts.map((p, j) => <circle key={p.i} cx={p.x} cy={p.y} r={j === pts.length - 1 ? 4 : 2.4} fill={ARGILE.clay} opacity={0.5 + (j / Math.max(1, pts.length - 1)) * 0.5} />)}
+            </>;
+          })()}
         </svg>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace' }}>
-          <span>23 avr</span><span>9 mai</span><span>23 mai</span>
+          <span>{fmt(d30)}</span><span>{fmt(d15)}</span><span>{fmt(now)}</span>
         </div>
       </div>
 
       {/* zones du mois */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {[
-          { zone: 'Sombre', days: 3, color: '#6B5C84' },
-          { zone: 'Bas', days: 6, color: '#A47A6C' },
-          { zone: 'Stable', days: 14, color: '#C39265' },
-          { zone: 'Haut', days: 5, color: '#D67A3C' },
-          { zone: 'Brûlant', days: 2, color: '#B85839' },
-        ].map(r => (
+        {activZones.length > 0 ? activZones.map(r => (
           <div key={r.zone} style={{
             display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px',
             background: ARGILE.paper, borderRadius: 14, border: `1px solid ${ARGILE.border}`,
@@ -702,15 +787,17 @@ function ArgileStats() {
             <div style={{ width: 8, height: 32, borderRadius: 4, background: r.color }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 19, color: ARGILE.ink, fontStyle: 'italic' }}>{r.zone}</div>
-              <div style={{ fontSize: 11, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em' }}>{r.days} JOURS</div>
+              <div style={{ fontSize: 11, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em' }}>{r.days} JOUR{r.days > 1 ? 'S' : ''}</div>
             </div>
-            <div style={{
-              width: 80, height: 6, background: ARGILE.sand2, borderRadius: 3, overflow: 'hidden',
-            }}>
-              <div style={{ width: (r.days / 30 * 100) + '%', height: '100%', background: r.color }} />
+            <div style={{ width: 80, height: 6, background: ARGILE.sand2, borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: (r.days / r.total * 100) + '%', height: '100%', background: r.color }} />
             </div>
           </div>
-        ))}
+        )) : (
+          <div style={{ padding: '24px', textAlign: 'center', borderRadius: 14, border: `1.5px dashed ${ARGILE.border}`, color: ARGILE.muted, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 17 }}>
+            Aucune donnée d'humeur enregistrée.
+          </div>
+        )}
       </div>
     </div>
   );
