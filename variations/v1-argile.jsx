@@ -267,8 +267,10 @@ function ArgileShell({ children, active, onNav, hideHeader = false }) {
           {syncLabel}
         </div>
       )}
-      <div style={{ height: '100%', overflowY: 'auto', paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)', paddingBottom: 'calc(100px + env(safe-area-inset-bottom, 0px))' }}>
-        {children}
+      <div style={{ height: '100%', overflowY: 'auto' }}>
+        <div style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)', paddingBottom: 'calc(120px + env(safe-area-inset-bottom, 0px))' }}>
+          {children}
+        </div>
       </div>
       {/* bottom nav */}
       <div style={{
