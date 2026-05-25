@@ -693,14 +693,21 @@ function ArgileStatsDeep() {
 
                   if (entry) {
                     const hz = humeurZoneOf(entry);
+                    const mens = entry.menstruation || [];
+                    const hasRegles    = mens.includes('regles');
+                    const hasOvulation = mens.includes('ovulation');
+                    const mensColor = hasRegles ? '#D14D72' : hasOvulation ? '#9B7EBD' : null;
+                    const mensTitle = hasRegles ? ' · 🩸 Règles' : hasOvulation ? ' · 🌸 Ovulation' : '';
                     return (
                       <div key={di}
                         onClick={() => setEditDate(ds)}
-                        title={`${ds} · ${hz ? hz.label : '?'}`}
+                        title={`${ds} · ${hz ? hz.label : '?'}${mensTitle}`}
                         style={{
                           height: 10, borderRadius: 2, cursor: 'pointer',
                           background: hz ? hz.color : ARGILE.sand2,
-                          boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.10)',
+                          boxShadow: mensColor
+                            ? `inset 0 -3px 0 ${mensColor}`
+                            : 'inset 0 -1px 0 rgba(43,24,16,0.10)',
                           ...todayOutline,
                         }} />
                     );
@@ -760,6 +767,14 @@ function ArgileStatsDeep() {
               background: `repeating-linear-gradient(45deg, rgba(107,92,132,0.6) 0 1.5px, ${ARGILE.sand2} 1.5px 3.5px)`,
               outline: '0.8px solid rgba(107,92,132,0.7)', outlineOffset: '-0.5px' }} />
             <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Phase Basse ↘</span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 12, height: 10, borderRadius: 2, display: 'inline-block', background: ARGILE.sand2, boxShadow: 'inset 0 -3px 0 #D14D72' }} />
+            <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Règles</span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 12, height: 10, borderRadius: 2, display: 'inline-block', background: ARGILE.sand2, boxShadow: 'inset 0 -3px 0 #9B7EBD' }} />
+            <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>Ovulation</span>
           </span>
         </div>
         {/* Bandeau info simulation */}
