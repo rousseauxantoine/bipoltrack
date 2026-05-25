@@ -976,13 +976,85 @@ function ArgileMeds() {
 // RAPPORT — mix imprimé + métriques cliniques
 // ══════════════════════════════════════════════════════════════════════
 function ArgileReport() {
+  const patientName   = LS.get('bt_patient_name',   '');
+  const patientDob    = LS.get('bt_patient_dob',    '');
+  const patientDoctor = LS.get('bt_patient_doctor', '');
+
+  const today    = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const start    = new Date(today); start.setDate(start.getDate() - 29);
+  const startStr = start.toISOString().slice(0, 10);
+
+  const fmtLong  = d => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const fmtShort = d => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const monthYear = today.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+  const entries = LS.getJSON('bt_entries', []).filter(e => e.date >= startStr && e.date <= todayStr);
+
+  const median = arr => {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+
+  const sleeps    = entries.map(e => e.sleep).filter(v => v != null);
+  const sleepMed  = median(sleeps);
+  const sleepMean = sleeps.length ? sleeps.reduce((a, b) => a + b, 0) / sleeps.length : null;
+  const sleepSigma = sleepMed != null && sleepMean != null
+    ? Math.sqrt(sleeps.reduce((s, v) => s + (v - sleepMean) ** 2, 0) / sleeps.length).toFixed(1)
+    : null;
+
+  const humeurOrdinals = entries
+    .map(e => { const z = humeurZoneOf(e); return z ? ARGILE_HUMEUR_OPTS.indexOf(z) : -1; })
+    .filter(i => i >= 0);
+  const sortedOrd        = [...humeurOrdinals].sort((a, b) => a - b);
+  const medianHumeurIdx  = sortedOrd.length ? sortedOrd[Math.floor(sortedOrd.length / 2)] : null;
+  const medianHumeur     = medianHumeurIdx != null ? ARGILE_HUMEUR_OPTS[medianHumeurIdx] : null;
+  const moodVariability  = humeurOrdinals.length >= 2
+    ? '±' + (() => {
+        const mean = humeurOrdinals.reduce((a, b) => a + b, 0) / humeurOrdinals.length;
+        const v    = humeurOrdinals.reduce((s, x) => s + (x - mean) ** 2, 0) / humeurOrdinals.length;
+        return Math.sqrt(v).toFixed(1);
+      })()
+    : null;
+
+  const anxieties  = entries.map(e => e.anxiety).filter(v => v != null);
+  const anxietyAvg = anxieties.length ? (anxieties.reduce((a, b) => a + b, 0) / anxieties.length).toFixed(1) : null;
+  const anxietyMax = anxieties.length ? Math.max(...anxieties) : null;
+
+  const humeurDist   = ARGILE_HUMEUR_OPTS.map(opt => ({
+    label: opt.label, color: opt.color,
+    count: entries.filter(e => humeurZoneOf(e)?.id === opt.id).length,
+  }));
+  const totalHumeur  = humeurDist.reduce((s, d) => s + d.count, 0);
+
+  const meds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
+
+  const recentNotes = entries.filter(e => e.note?.trim()).slice(-3);
+
+  const headerPatient = [
+    patientName || 'Patient non configuré',
+    patientDob ? `né·e le ${patientDob}` : '',
+  ].filter(Boolean).join(' · ');
+  const headerDoctor = [patientDoctor, fmtShort(today)].filter(Boolean).join(' · ');
+
+  const metrics = [
+    { l: 'Jours notés',    v: `${entries.length} / 30`,                                      detail: `${Math.round((entries.length / 30) * 100)} %` },
+    { l: 'Humeur médiane', v: medianHumeur?.label ?? '—',                                     detail: '' },
+    { l: 'Variabilité',    v: moodVariability ?? '—',                                         detail: 'écart-type' },
+    { l: 'Sommeil médian', v: sleepMed != null ? sleepMed.toFixed(1).replace('.', ',') + ' h' : '—', detail: sleepSigma != null ? `σ ${sleepSigma} h` : '' },
+    { l: 'Traitements',    v: meds.length ? `${meds.length} actif${meds.length > 1 ? 's' : ''}` : 'aucun', detail: '' },
+    { l: 'Anxiété moy.',   v: anxietyAvg != null ? `${anxietyAvg}/10` : '—',                 detail: anxietyMax != null ? `pic à ${anxietyMax}` : '' },
+  ];
+
   return (
     <div style={{ padding: '20px 18px 0' }}>
       <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 6px' }}>À l'attention du médecin</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 36, lineHeight: 1.0, margin: '8px 6px 4px', color: ARGILE.ink, fontWeight: 400 }}>
         <span style={{ fontStyle: 'italic' }}>Rapport</span> de 30 jours
       </h1>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 6px 20px' }}>Du 24 avril au 24 mai 2026.</p>
+      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '4px 6px 20px' }}>Du {fmtLong(start)} au {fmtLong(today)}.</p>
 
       {/* Printed paper card */}
       <div style={{
@@ -994,31 +1066,24 @@ function ArgileReport() {
         {/* paper header */}
         <div style={{ textAlign: 'center', borderBottom: `1.5px solid ${ARGILE.ink}`, paddingBottom: 12, marginBottom: 14 }}>
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.2em', color: ARGILE.muted, textTransform: 'uppercase' }}>
-            Patient · Léa Moreau · née le 14.03.1994
+            Patient · {headerPatient}
           </div>
           <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, fontStyle: 'italic', color: ARGILE.ink, lineHeight: 1, marginTop: 6 }}>
-            Suivi humeur — Mai 2026
+            Suivi humeur — {monthYear}
           </div>
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.16em', color: ARGILE.muted, textTransform: 'uppercase', marginTop: 6 }}>
-            Dr. Mercier · CH Bichat · 24.05.2026
+            {headerDoctor}
           </div>
         </div>
 
         {/* Clinical metrics — newspaper-style grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 18px', marginBottom: 16 }}>
-          {[
-            { l: 'Jours notés', v: '30 / 30', detail: '100%' },
-            { l: 'Humeur médiane', v: 'Stable', detail: 'éch. 5/10' },
-            { l: 'Variabilité', v: '±1,8', detail: 'écart-type' },
-            { l: 'Sommeil médian', v: '7,2 h', detail: 'σ 0,9 h' },
-            { l: 'Adhérence', v: '93 %', detail: 'tous trt.' },
-            { l: 'Anxiété moy.', v: '3,1/10', detail: 'pic à 7' },
-          ].map((m, i) => (
+          {metrics.map((m, i) => (
             <div key={i} style={{ borderBottom: `1px solid ${ARGILE.border}`, paddingBottom: 6 }}>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, letterSpacing: '0.16em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 2 }}>{m.l}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, lineHeight: 1, fontStyle: 'italic' }}>{m.v}</span>
-                <span style={{ fontSize: 10, color: ARGILE.muted }}>{m.detail}</span>
+                {m.detail && <span style={{ fontSize: 10, color: ARGILE.muted }}>{m.detail}</span>}
               </div>
             </div>
           ))}
@@ -1027,18 +1092,26 @@ function ArgileReport() {
         {/* Zone breakdown */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.16em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 8 }}>
-            Distribution par zone (30 j)
+            Distribution par humeur (30 j)
           </div>
-          <div style={{ display: 'flex', height: 12, borderRadius: 2, overflow: 'hidden', border: `1px solid ${ARGILE.border}` }}>
-            <div style={{ width: '10%', background: '#6B5C84' }} title="Sombre 3j" />
-            <div style={{ width: '20%', background: '#A47A6C' }} title="Bas 6j" />
-            <div style={{ width: '47%', background: '#C39265' }} title="Stable 14j" />
-            <div style={{ width: '17%', background: '#D67A3C' }} title="Haut 5j" />
-            <div style={{ width: '6%',  background: '#B85839' }} title="Brûlant 2j" />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 9, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            <span>Sombre 3j</span><span>Bas 6j</span><span>Stable 14j</span><span>Haut 5j</span><span>Brûlant 2j</span>
-          </div>
+          {totalHumeur > 0 ? (
+            <>
+              <div style={{ display: 'flex', height: 12, borderRadius: 2, overflow: 'hidden', border: `1px solid ${ARGILE.border}` }}>
+                {humeurDist.map((d, i) => d.count > 0 && (
+                  <div key={i} style={{ width: `${(d.count / totalHumeur) * 100}%`, background: d.color }} title={`${d.label} ${d.count}j`} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 6, fontSize: 9, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                {humeurDist.filter(d => d.count > 0).map((d, i) => (
+                  <span key={i}>{d.label} {d.count}j</span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', margin: 0 }}>
+              Aucune donnée d'humeur sur la période.
+            </p>
+          )}
         </div>
 
         {/* Treatment block */}
@@ -1046,50 +1119,46 @@ function ArgileReport() {
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.16em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 6 }}>
             Traitements en cours
           </div>
-          {(() => {
-            const meds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
-            if (meds.length === 0) return (
-              <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', margin: 0 }}>
-                Aucun traitement configuré.
-              </p>
+          {meds.length === 0 ? (
+            <p style={{ fontSize: 13, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', margin: 0 }}>
+              Aucun traitement configuré.
+            </p>
+          ) : meds.map((m, i) => {
+            const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
+            return (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < meds.length - 1 ? `1px dotted ${ARGILE.border}` : 'none', fontSize: 13 }}>
+                <span style={{ fontFamily: 'Instrument Serif, serif', fontWeight: 500, color: ARGILE.ink }}>{m.name}{detail && <span style={{ fontStyle: 'italic', color: ARGILE.muted, fontWeight: 400, marginLeft: 6, fontSize: 12 }}>— {detail}</span>}</span>
+              </div>
             );
-            return meds.map((m, i) => {
-              const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
-              return (
-                <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < meds.length - 1 ? `1px dotted ${ARGILE.border}` : 'none', fontSize: 13 }}>
-                  <span style={{ fontFamily: 'Instrument Serif, serif', fontWeight: 500, color: ARGILE.ink }}>{m.name}{detail && <span style={{ fontStyle: 'italic', color: ARGILE.muted, fontWeight: 400, marginLeft: 6, fontSize: 12 }}>— {detail}</span>}</span>
-                </div>
-              );
-            });
-          })()}
+          })}
         </div>
 
         {/* Notes synthesis */}
         <div>
           <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.16em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 6 }}>
-            Observations cliniques pertinentes
+            Observations récentes
           </div>
-          <p style={{ fontFamily: 'Instrument Serif, serif', fontSize: 14, lineHeight: 1.55, color: ARGILE.ink, margin: 0, fontStyle: 'italic' }}>
-            « Période globalement stable. Deux jours en zone "Brûlant" (12 & 13 mai) précédés d'une nuit courte (5 h). Pleurs et retrait notés autour du 18 mai, résolus en 48 h. Cycle menstruel régulier. »
-          </p>
+          {recentNotes.length > 0 ? recentNotes.map((e, i) => (
+            <p key={i} style={{ fontFamily: 'Instrument Serif, serif', fontSize: 14, lineHeight: 1.55, color: ARGILE.ink, margin: i > 0 ? '8px 0 0' : 0, fontStyle: 'italic' }}>
+              « {e.note.trim()} »
+              <span style={{ display: 'block', fontSize: 9, fontStyle: 'normal', fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.1em', marginTop: 2 }}>{e.date}</span>
+            </p>
+          )) : (
+            <p style={{ fontFamily: 'Instrument Serif, serif', fontSize: 14, lineHeight: 1.55, color: ARGILE.muted, margin: 0, fontStyle: 'italic' }}>
+              Aucune note saisie sur la période.
+            </p>
+          )}
         </div>
       </div>
 
       {/* Action buttons */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 6px 8px' }}>
-        <button style={{
+        <button onClick={() => window.print()} style={{
           padding: '16px 20px', border: 'none', borderRadius: 100,
           background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
           fontStyle: 'italic', fontSize: 18, cursor: 'pointer', boxShadow: '0 6px 16px rgba(184,88,57,0.25)',
         }}>
-          Envoyer en PDF →
-        </button>
-        <button style={{
-          padding: '14px 20px', border: `1px solid ${ARGILE.border}`, borderRadius: 100,
-          background: ARGILE.paper, color: ARGILE.ink, fontFamily: 'Instrument Serif, serif',
-          fontStyle: 'italic', fontSize: 16, cursor: 'pointer',
-        }}>
-          Imprimer
+          Imprimer / enregistrer en PDF →
         </button>
       </div>
     </div>
