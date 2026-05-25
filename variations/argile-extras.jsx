@@ -961,6 +961,7 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
   const [checkedMeds,  setCheckedMeds]  = useStateAx(entry?.meds         || []);
   const [menstruation, setMenstruation] = useStateAx(entry?.menstruation || []);
   const [note,         setNote]         = useStateAx(entry?.note         || '');
+  const [repeatUntil,  setRepeatUntil]  = useStateAx(null);
 
   const allMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
 
@@ -980,16 +981,30 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
     const penseesId = ARGILE_PENSEES_OPTS[pensees].id;
     const energieId = ARGILE_ENERGIE_OPTS[energie].id;
     const moodVal   = ARGILE_HUMEUR_OPTS[humeur].moodVal;
-    const all = LS.getJSON('bt_entries', []);
-    const updated = {
-      date, humeur: humeurId, pensees: penseesId, energie: energieId, mood: moodVal,
+    const base = {
+      humeur: humeurId, pensees: penseesId, energie: energieId, mood: moodVal,
       sleep, symptoms, meds: checkedMeds, note,
-      effects: entry?.effects || [], menstruation, ts: entry?.ts || Date.now(),
+      effects: entry?.effects || [], menstruation,
     };
-    const idx = all.findIndex(e => e.date === date);
-    if (idx >= 0) all[idx] = updated; else all.unshift(updated);
+    // Génère la liste des dates (plage ou jour unique)
+    const dates = [];
+    const cur = new Date(date + 'T12:00:00');
+    const end = repeatUntil && repeatUntil > date
+      ? new Date(repeatUntil + 'T12:00:00')
+      : cur;
+    while (cur <= end) {
+      dates.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+    const all = LS.getJSON('bt_entries', []);
+    dates.forEach(d => {
+      const existing = all.find(e => e.date === d);
+      const dayEntry = { ...base, date: d, ts: existing?.ts || Date.now() };
+      const idx = all.findIndex(e => e.date === d);
+      if (idx >= 0) all[idx] = dayEntry; else all.push(dayEntry);
+    });
     LS.setJSON('bt_entries', all);
-    onSave(updated);
+    onSave(base);
   };
 
   const handleDelete = () => {
@@ -1104,12 +1119,64 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
               fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box', outline: 'none' }} />
         </div>
 
+        {/* Période */}
+        <div style={{ marginBottom: 20, borderTop: `1px solid ${ARGILE.border}`, paddingTop: 16 }}>
+          <div
+            onClick={() => setRepeatUntil(r => {
+              if (r) return null;
+              const next = new Date(date + 'T12:00:00');
+              next.setDate(next.getDate() + 1);
+              return next.toISOString().slice(0, 10);
+            })}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+          >
+            <div style={{
+              width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+              border: `2px solid ${repeatUntil ? ARGILE.clay : ARGILE.muted}`,
+              background: repeatUntil ? ARGILE.clay : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {repeatUntil && <svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.5 6L8 1" stroke="#FBF6EB" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.12em', color: repeatUntil ? ARGILE.clay : ARGILE.muted, textTransform: 'uppercase' }}>
+              Appliquer à une période
+            </span>
+          </div>
+          {repeatUntil && (
+            <div style={{ marginTop: 12, padding: '12px 14px', background: ARGILE.paper, borderRadius: 12, border: `1px solid ${ARGILE.border}` }}>
+              <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: ARGILE.muted, textTransform: 'uppercase', letterSpacing: '0.10em', margin: '0 0 8px' }}>
+                Du {dateLabel} au
+              </p>
+              <input
+                type="date"
+                value={repeatUntil}
+                min={date}
+                onChange={e => setRepeatUntil(e.target.value || date)}
+                style={{
+                  width: '100%', border: `1.5px solid ${ARGILE.clay}`, borderRadius: 8,
+                  padding: '8px 10px', fontSize: 14, fontFamily: 'DM Sans, sans-serif',
+                  background: ARGILE.cream, color: ARGILE.ink, outline: 'none',
+                  boxSizing: 'border-box', accentColor: ARGILE.clay,
+                }}
+              />
+              {repeatUntil > date && (
+                <p style={{ fontSize: 11, color: ARGILE.muted, margin: '8px 0 0', fontStyle: 'italic' }}>
+                  {Math.round((new Date(repeatUntil + 'T12:00:00') - new Date(date + 'T12:00:00')) / 86400000) + 1} jours · mêmes valeurs pour toute la période
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Actions */}
         <button onClick={handleSave} style={{
           width: '100%', padding: 16, border: 'none', borderRadius: 14,
           background: ARGILE.ink, color: ARGILE.paper,
           fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18, cursor: 'pointer', marginBottom: 10,
-        }}>Enregistrer</button>
+        }}>{repeatUntil && repeatUntil > date
+          ? `Enregistrer ${Math.round((new Date(repeatUntil + 'T12:00:00') - new Date(date + 'T12:00:00')) / 86400000) + 1} jours`
+          : 'Enregistrer'
+        }</button>
         {entry && (
           <button onClick={handleDelete} style={{
             width: '100%', padding: 12, borderRadius: 14, fontSize: 13, cursor: 'pointer', marginBottom: 8,
