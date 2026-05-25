@@ -226,7 +226,7 @@ function ArgileMoodOrb({ value, onChange, finish = 'lisse' }) {
   );
 }
 
-function ArgileShell({ children, active, onNav, hideHeader = false }) {
+function ArgileShell({ children, active, onNav, hideHeader = false, hasNoData = false, onTutorial }) {
   const tabs = [
     { id: 'journal', label: 'Journal' },
     { id: 'stats',   label: 'Carnet' },
@@ -253,6 +253,20 @@ function ArgileShell({ children, active, onNav, hideHeader = false }) {
       width: '100%', height: '100%', background: ARGILE.sand,
       fontFamily: 'DM Sans, sans-serif', color: ARGILE.ink, position: 'relative', overflow: 'hidden',
     }}>
+      {/* Bouton tutoriel — affiché uniquement si aucune donnée enregistrée */}
+      {hasNoData && onTutorial && (
+        <button onClick={onTutorial} style={{
+          position: 'absolute', top: 10, left: 14, zIndex: 20,
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          letterSpacing: '0.10em', color: ARGILE.clay,
+          background: 'rgba(251,246,235,0.85)', backdropFilter: 'blur(6px)',
+          padding: '3px 10px', borderRadius: 20,
+          border: `1px solid ${ARGILE.border}`,
+          cursor: 'pointer', textTransform: 'uppercase',
+        }}>
+          ? tutoriel
+        </button>
+      )}
       {/* Badge last sync — affiché sur toutes les pages si une synchro a eu lieu */}
       {syncLabel && (
         <div style={{
@@ -855,6 +869,13 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const [journalDraft, setJournalDraft] = useStateA({ humeur: null, pensees: null });
   const [restoreData, setRestoreData] = useStateA(null);
 
+  // Onboarding : popup si aucune donnée au premier lancement
+  const hasNoData = LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0;
+  const [showWelcome, setShowWelcome] = useStateA(
+    () => LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0
+  );
+  const [showTutorial, setShowTutorial] = useStateA(false);
+
   // Écouter les demandes de restauration (conflit de données Drive détecté)
   useEffectA(() => {
     const handleRestoreReq = (e) => {
@@ -924,7 +945,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-      <ArgileShell active={active} onNav={(t) => {
+      <ArgileShell active={active} hasNoData={hasNoData} onTutorial={() => setShowTutorial(true)} onNav={(t) => {
         if (t === 'journal') setScreen('journal');
         else if (t === 'stats') setScreen('stats-deep');
         else if (t === 'news') setScreen('news');
@@ -1021,6 +1042,19 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tutoriel — bottom sheet */}
+      {showTutorial && window.ArgileTutorial && (
+        <ArgileTutorial onClose={() => setShowTutorial(false)} />
+      )}
+
+      {/* Popup d'accueil — affiché au premier lancement si aucune donnée */}
+      {showWelcome && window.ArgileWelcome && (
+        <ArgileWelcome
+          onNewSession={() => { setShowWelcome(false); setScreen('journal'); }}
+          onImport={() => window.location.reload()}
+        />
       )}
     </div>
   );

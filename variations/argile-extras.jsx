@@ -155,6 +155,54 @@ async function driveAutoSync() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// GOOGLE OAUTH — helper partagé (Welcome + Settings)
+// ══════════════════════════════════════════════════════════════════════
+function googleOAuthToken(clientId) {
+  return new Promise((resolve, reject) => {
+    const cached = sessionStorage.getItem('bt_google_token');
+    const expiry  = sessionStorage.getItem('bt_google_token_expiry');
+    if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
+    if (!clientId) { reject(new Error('Client ID manquant')); return; }
+
+    const redirectUri = window.location.href.replace(/[^/]*(\?.*)?$/, 'oauth.html');
+    const scope       = 'https://www.googleapis.com/auth/drive.file';
+    const authUrl     = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id='     + encodeURIComponent(clientId)
+      + '&redirect_uri='  + encodeURIComponent(redirectUri)
+      + '&response_type=token'
+      + '&scope='         + encodeURIComponent(scope);
+
+    const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
+    if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
+
+    const onMsg = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const d = event.data;
+      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
+      window.removeEventListener('message', onMsg);
+      clearInterval(watchClose);
+      if (d.type === 'bt-oauth-token') {
+        const exp = +(d.expiresIn || 3600);
+        sessionStorage.setItem('bt_google_token', d.token);
+        sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
+        resolve(d.token);
+      } else {
+        reject(new Error(d.error || 'auth échouée'));
+      }
+    };
+    window.addEventListener('message', onMsg);
+
+    const watchClose = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(watchClose);
+        window.removeEventListener('message', onMsg);
+        reject(new Error('Fenêtre fermée sans authentification'));
+      }
+    }, 600);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // NEWS — synthèse IA + RSS
 // ══════════════════════════════════════════════════════════════════════
 const NEWS_RSS_PROXY    = 'https://api.rss2json.com/v1/api.json?rss_url=';
@@ -1490,53 +1538,8 @@ function ArgileSettings() {
     setTimeout(() => setExportFeedback(''), 2000);
   };
 
-  // ── Google Drive — OAuth token (flux implicite, popup + postMessage) ─
-  // redirect_uri : même dossier que index.html + oauth.html
-  // → fonctionne en local (localhost:8080) ET sur GitHub Pages (/bipoltrack/)
-  const redirectUri = window.location.href.replace(/[^/]*(\?.*)?$/, 'oauth.html');
-
-  const getGoogleToken = () => new Promise((resolve, reject) => {
-    const cached = sessionStorage.getItem('bt_google_token');
-    const expiry  = sessionStorage.getItem('bt_google_token_expiry');
-    if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
-    if (!driveId) { reject(new Error('Client ID manquant')); return; }
-    const scope    = 'https://www.googleapis.com/auth/drive.file';
-    const authUrl  = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id='     + encodeURIComponent(driveId)
-      + '&redirect_uri='  + encodeURIComponent(redirectUri)
-      + '&response_type=token'
-      + '&scope='         + encodeURIComponent(scope);
-
-    const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
-    if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
-
-    // Le token est transmis par oauth.html via postMessage
-    const onMsg = (event) => {
-      if (event.origin !== window.location.origin) return;
-      const d = event.data;
-      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
-      window.removeEventListener('message', onMsg);
-      clearInterval(watchClose);
-      if (d.type === 'bt-oauth-token') {
-        const exp = +(d.expiresIn || 3600);
-        sessionStorage.setItem('bt_google_token', d.token);
-        sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
-        resolve(d.token);
-      } else {
-        reject(new Error(d.error || 'auth échouée'));
-      }
-    };
-    window.addEventListener('message', onMsg);
-
-    // Fallback si la fenêtre est fermée sans postMessage
-    const watchClose = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(watchClose);
-        window.removeEventListener('message', onMsg);
-        reject(new Error('Fenêtre fermée sans authentification'));
-      }
-    }, 600);
-  });
+  // ── Google Drive — OAuth token via helper partagé ─────────────────
+  const getGoogleToken = () => googleOAuthToken(driveId);
 
   // ── Sauvegarder vers Drive ─────────────────────────────────────────
   const saveNow = async () => {
@@ -1778,7 +1781,312 @@ function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// WELCOME — popup d'accueil au premier lancement
+// ══════════════════════════════════════════════════════════════════════
+function ArgileWelcome({ onNewSession, onImport }) {
+  const [step, setStep]       = useStateAx('choice');
+  const [clientId, setClientId] = useStateAx('');
+  const [syncing, setSyncing] = useStateAx(false);
+  const [syncMsg, setSyncMsg] = useStateAx('');
+
+  const handleDriveImport = async () => {
+    const id = clientId.trim();
+    if (!id) return;
+    LS.set('bt_drive_client_id', id);
+    setSyncing(true);
+    setSyncMsg('Connexion à Google…');
+    try {
+      const token = await googleOAuthToken(id);
+      setSyncMsg('Récupération des données…');
+      const search = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='bipoltrack-backup.json'+and+trashed=false`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json());
+      const fileId = search.files?.[0]?.id;
+      if (!fileId) {
+        setSyncMsg('Aucune sauvegarde trouvée — démarrage en nouvelle session…');
+        setTimeout(() => onNewSession(), 2000);
+        return;
+      }
+      const raw  = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json());
+      const file = migrateData(raw);
+      if (file.entries)       LS.setJSON('bt_entries',     file.entries);
+      if (file.meds)          LS.setJSON('bt_meds',        file.meds);
+      if (file.patientName)   LS.set('bt_patient_name',    file.patientName);
+      if (file.patientDob)    LS.set('bt_patient_dob',     file.patientDob);
+      if (file.patientDoctor) LS.set('bt_patient_doctor',  file.patientDoctor);
+      LS.set('bt_last_synced', String(Date.now()));
+      setSyncMsg(`${(file.entries || []).length} entrée${(file.entries || []).length > 1 ? 's' : ''} importée${(file.entries || []).length > 1 ? 's' : ''} ✓`);
+      setTimeout(() => { onImport(); }, 1500);
+    } catch (e) {
+      setSyncMsg('Erreur : ' + e.message);
+      setSyncing(false);
+    }
+  };
+
+  const Seal = () => (
+    <svg viewBox="0 0 100 100" width="88" height="88">
+      <defs>
+        <radialGradient id="wg1" cx="0.35" cy="0.3">
+          <stop offset="0" stopColor="#F5C593" />
+          <stop offset="1" stopColor={ARGILE.clayDk} />
+        </radialGradient>
+      </defs>
+      <circle cx="50" cy="50" r="46" fill="none" stroke={ARGILE.clay} strokeWidth="1.2" strokeDasharray="3 4" opacity="0.45" />
+      <circle cx="50" cy="50" r="34" fill="url(#wg1)" />
+      <g fill="none" stroke="rgba(255,240,220,0.55)" strokeWidth="1.1" strokeLinecap="round">
+        <path d="M50 32 Q60 34 64 44 Q68 54 60 62 Q52 68 44 64 Q36 60 38 50 Q40 44 48 44 Q52 46 50 52" />
+        <path d="M50 38 Q57 40 59 46" />
+      </g>
+    </svg>
+  );
+
+  // ── Étape 1 : choix ─────────────────────────────────────────────────
+  if (step === 'choice') {
+    return (
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 500, overflow: 'hidden',
+        background: `radial-gradient(ellipse at 50% 0%, ${ARGILE.cream} 0%, ${ARGILE.sand} 75%)`,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        padding: '0 24px 40px',
+      }}>
+        <style>{`
+          @keyframes wlc-pop { 0% { transform: scale(0.82); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+          .wlc-1 { animation: wlc-pop 0.65s cubic-bezier(0.2,1.4,0.4,1) 0.05s both; }
+          .wlc-2 { animation: wlc-pop 0.55s cubic-bezier(0.2,0.9,0.4,1) 0.40s both; }
+          .wlc-3 { animation: wlc-pop 0.45s ease-out 0.70s both; }
+        `}</style>
+
+        <div className="wlc-1" style={{ marginTop: 68, marginBottom: 28 }}><Seal /></div>
+
+        <div className="wlc-2" style={{ textAlign: 'center', marginBottom: 44 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 16px' }}>
+            Premier pas
+          </p>
+          <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 46, lineHeight: 0.95, margin: '0 0 16px', color: ARGILE.ink, fontWeight: 400 }}>
+            Bienvenue <span style={{ fontStyle: 'italic' }}>ici.</span>
+          </h1>
+          <p style={{ fontSize: 15, lineHeight: 1.6, color: ARGILE.ink2, margin: 0 }}>
+            BipolTrack note ton humeur, ton sommeil<br/>et tes traitements. Chaque jour.
+          </p>
+        </div>
+
+        <div className="wlc-3" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={onNewSession} style={{
+            width: '100%', padding: '18px 20px', border: 'none', borderRadius: 100,
+            background: ARGILE.clay, color: ARGILE.paper,
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+            fontSize: 20, cursor: 'pointer',
+            boxShadow: '0 8px 22px rgba(184,88,57,0.28)',
+          }}>
+            Nouvelle session →
+          </button>
+          <button onClick={() => setStep('drive')} style={{
+            width: '100%', padding: '16px 20px',
+            border: `1.5px solid ${ARGILE.border}`, borderRadius: 100,
+            background: ARGILE.paper, color: ARGILE.ink2,
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+            fontSize: 18, cursor: 'pointer',
+          }}>
+            Importer mes données
+          </button>
+          <p style={{ fontSize: 12, color: ARGILE.muted, textAlign: 'center', margin: '6px 0 0', lineHeight: 1.5 }}>
+            Tes données restent sur cet appareil.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Étape 2 : saisie du Client ID Google Drive ───────────────────────
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 500, overflow: 'hidden',
+      background: `radial-gradient(ellipse at 50% 0%, ${ARGILE.cream} 0%, ${ARGILE.sand} 75%)`,
+      display: 'flex', flexDirection: 'column',
+      padding: '0 24px 40px',
+    }}>
+      {!syncing && (
+        <button onClick={() => { setStep('choice'); setSyncMsg(''); }} style={{
+          alignSelf: 'flex-start',
+          marginTop: 'max(env(safe-area-inset-top, 0px), 18px)',
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
+          color: ARGILE.muted, letterSpacing: '0.08em', padding: '4px 0',
+        }}>← retour</button>
+      )}
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 16px' }}>
+          Google Drive
+        </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '0 0 12px', color: ARGILE.ink, fontWeight: 400 }}>
+          Ton <span style={{ fontStyle: 'italic' }}>identifiant</span><br/>Google.
+        </h2>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: ARGILE.ink2, margin: '0 0 28px' }}>
+          Copie ton <em>Client ID OAuth 2.0</em> depuis la{' '}
+          <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: ARGILE.clay, textDecorationColor: ARGILE.clay }}>console Google Cloud</a>.
+          BipolTrack récupérera ta sauvegarde existante.
+        </p>
+
+        <label style={{ display: 'block', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.12em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+          Client ID OAuth 2.0
+        </label>
+        <input
+          value={clientId}
+          onChange={e => setClientId(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !syncing) handleDriveImport(); }}
+          placeholder="123456789-xxx.apps.googleusercontent.com"
+          disabled={syncing}
+          autoFocus
+          style={{
+            width: '100%', padding: '14px 16px', borderRadius: 14,
+            border: `1.5px solid ${clientId.trim() ? ARGILE.clay : ARGILE.border}`,
+            background: ARGILE.paper, fontSize: 13,
+            fontFamily: 'DM Sans, sans-serif', color: ARGILE.ink,
+            outline: 'none', boxSizing: 'border-box',
+            transition: 'border-color 0.15s',
+            opacity: syncing ? 0.6 : 1,
+          }}
+        />
+
+        {syncMsg && (
+          <div style={{
+            marginTop: 12, padding: '10px 16px', borderRadius: 12,
+            background: syncMsg.includes('✓') ? 'rgba(92,106,62,0.10)'
+              : syncMsg.includes('Erreur') ? 'rgba(184,88,57,0.08)'
+              : ARGILE.sand2,
+            color: syncMsg.includes('✓') ? ARGILE.olive
+              : syncMsg.includes('Erreur') ? ARGILE.clay
+              : ARGILE.muted,
+            fontSize: 13, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', lineHeight: 1.45,
+          }}>
+            {syncMsg}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={handleDriveImport}
+        disabled={!clientId.trim() || syncing}
+        style={{
+          width: '100%', padding: '18px 20px', border: 'none', borderRadius: 100,
+          background: clientId.trim() && !syncing ? ARGILE.ink : ARGILE.sand2,
+          color: clientId.trim() && !syncing ? ARGILE.paper : ARGILE.muted,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 18, cursor: clientId.trim() && !syncing ? 'pointer' : 'default',
+          transition: 'background 0.2s, color 0.2s',
+        }}
+      >
+        {syncing ? 'Synchronisation en cours…' : 'Synchroniser mes données →'}
+      </button>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// TUTORIEL — bottom sheet explicatif (visible si aucune donnée)
+// ══════════════════════════════════════════════════════════════════════
+function ArgileTutorial({ onClose }) {
+  const dims = [
+    {
+      num: '01', label: "L'humeur",
+      opts: ARGILE_HUMEUR_OPTS.map(o => o.label),
+      color: ARGILE_HUMEUR_OPTS[1].color,
+      desc: "Situe ton humeur chaque jour sur un axe de trois états. L'essentiel, sans note chiffrée.",
+    },
+    {
+      num: '02', label: "Les pensées",
+      opts: ARGILE_PENSEES_OPTS.map(o => o.label.split(' · ')[0]),
+      color: '#AE9F8C',
+      desc: "Comment ta tête tourne : lente et embrumée, claire, ou en surchauffe d'idées.",
+    },
+    {
+      num: '03', label: "L'énergie",
+      opts: ARGILE_ENERGIE_OPTS.map(o => o.label),
+      color: ARGILE_ENERGIE_OPTS[1].color,
+      desc: "Le carburant du corps — épuisé, en équilibre, ou en agitation.",
+    },
+  ];
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, zIndex: 400,
+      background: 'rgba(43,24,16,0.50)',
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '88vh', overflowY: 'auto',
+        background: ARGILE.sand, borderRadius: '20px 20px 0 0',
+        padding: '16px 24px 48px', boxSizing: 'border-box',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 22px' }} />
+
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>
+          Guide
+        </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 36, lineHeight: 1.0, margin: '0 0 10px', color: ARGILE.ink, fontWeight: 400 }}>
+          Comment ça <span style={{ fontStyle: 'italic' }}>marche.</span>
+        </h2>
+        <p style={{ fontSize: 14, color: ARGILE.ink2, lineHeight: 1.6, margin: '0 0 28px' }}>
+          Chaque jour, réponds à trois questions en glissant un curseur. L'application dessine ta courbe d'humeur au fil des semaines.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+          {dims.map((d) => (
+            <div key={d.num} style={{
+              background: ARGILE.paper, borderRadius: 16, padding: '18px 20px',
+              border: `1px solid ${ARGILE.border}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase' }}>{d.num}</span>
+                <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 21, color: ARGILE.ink, fontStyle: 'italic' }}>{d.label}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {d.opts.map((o, j) => (
+                  <span key={o} style={{
+                    fontSize: 11, padding: '4px 12px', borderRadius: 100,
+                    border: `1px solid ${j === 1 ? d.color : ARGILE.border}`,
+                    background: j === 1 ? `${d.color}20` : 'transparent',
+                    color: j === 1 ? d.color : ARGILE.muted,
+                    fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+                  }}>{o}</span>
+                ))}
+              </div>
+              <p style={{ fontSize: 13, color: ARGILE.ink2, lineHeight: 1.5, margin: 0 }}>{d.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Note vie privée */}
+        <div style={{
+          padding: '14px 18px', borderRadius: 14,
+          background: 'rgba(92,106,62,0.08)', border: '1px solid rgba(92,106,62,0.20)',
+          marginBottom: 24,
+        }}>
+          <p style={{ fontSize: 13, color: ARGILE.olive, lineHeight: 1.55, margin: 0, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic' }}>
+            Tes données restent uniquement sur cet appareil. Tu peux activer la sauvegarde Google Drive depuis les <em>Réglages</em> à tout moment.
+          </p>
+        </div>
+
+        <button onClick={onClose} style={{
+          width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.ink, color: ARGILE.paper,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 18, cursor: 'pointer',
+        }}>
+          Compris →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 Object.assign(window, {
   ArgileEmpty, ArgileNews, ArgileStatsDeep, ArgileMeds, ArgileReport, ArgileHistory, ArgileSettings,
-  ArgileEditEntry,
+  ArgileEditEntry, ArgileWelcome, ArgileTutorial,
 });
