@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────────────
 // ARGILE — extras : Empty, News, Stats annuel, Meds, Report, Settings, History
 // ──────────────────────────────────────────────────────────────────────
-const { useState: useStateAx, useRef: useRefAx, useMemo: useMemoAx } = React;
+const { useState: useStateAx, useRef: useRefAx, useMemo: useMemoAx, useEffect: useEffectAx } = React;
 
 // ══════════════════════════════════════════════════════════════════════
 // MIGRATIONS — versioning du schéma de données
@@ -114,12 +114,71 @@ function ArgileEmpty({ onStart }) {
 // ══════════════════════════════════════════════════════════════════════
 // NEWS — synthèse IA + RSS
 // ══════════════════════════════════════════════════════════════════════
+const NEWS_RSS_PROXY    = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const NEWS_MAX_PER_FEED = 3;
+
+function newsStripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
+async function newsLoadRssUrls() {
+  try {
+    const resp = await fetch('base-rss.md', { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    if (/<!doctype html|<html[\s>]/i.test(text)) return [];
+    return text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#') && /^https?:\/\/\S+$/i.test(l));
+  } catch (e) {
+    console.warn('base-rss.md:', e);
+    return [];
+  }
+}
+
+async function newsFetchOneFeed(url) {
+  try {
+    const resp = await fetch(NEWS_RSS_PROXY + encodeURIComponent(url));
+    const data = await resp.json();
+    if (data.status !== 'ok') throw new Error(data.message || 'flux invalide');
+    const sourceName = (data.feed && data.feed.title) || new URL(url).hostname;
+    const items = (data.items || []).slice(0, NEWS_MAX_PER_FEED).map(it => ({
+      source: sourceName,
+      title: it.title || '(sans titre)',
+      link: it.link || url,
+      pubDate: it.pubDate || '',
+      description: newsStripHtml(it.description || it.content || '').slice(0, 500),
+    }));
+    return items;
+  } catch (e) {
+    console.warn('Feed error', url, e);
+    return [];
+  }
+}
+
 function ArgileNews() {
-  const cache = LS.getJSON('bt_news_cache', null);
-  const articles = (cache && cache.articles) || [];
-  const cacheDate = cache && cache.date
-    ? new Date(cache.date).toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })
-    : null;
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const initCache = LS.getJSON('bt_news_cache', null);
+  const [articles, setArticles] = useStateAx((initCache?.date === todayISO ? initCache?.articles : null) || null);
+  const [loading, setLoading] = useStateAx(false);
+  const [cacheDate, setCacheDate] = useStateAx(initCache?.date === todayISO ? initCache.date : null);
+
+  const loadFeeds = async () => {
+    setLoading(true);
+    const urls = await newsLoadRssUrls();
+    if (!urls.length) { setLoading(false); setArticles([]); return; }
+    const results = await Promise.all(urls.map(newsFetchOneFeed));
+    const all = results.flat().sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+    const today = new Date().toISOString().slice(0, 10);
+    LS.setJSON('bt_news_cache', { date: today, articles: all });
+    setArticles(all);
+    setCacheDate(today);
+    setLoading(false);
+  };
+
+  useEffectAx(() => {
+    if (articles === null) loadFeeds();
+  }, []);
 
   const formatPubDate = (d) => {
     if (!d) return '';
@@ -128,19 +187,36 @@ function ArgileNews() {
     return dt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
   };
 
+  const cacheDateLabel = cacheDate
+    ? new Date(cacheDate + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })
+    : null;
+
   return (
     <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 80 }}>
       <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>L'actu, en bref</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '8px 0 4px', color: ARGILE.ink, fontWeight: 400 }}>
         <span style={{ fontStyle: 'italic' }}>Aujourd'hui</span>, en somme.
       </h1>
-      <p style={{ fontSize: 13, color: ARGILE.muted, margin: '0 0 24px' }}>
-        {cacheDate
-          ? `${cacheDate} · ${articles.length} article${articles.length > 1 ? 's' : ''}`
-          : 'Aucun article chargé.'}
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 24px' }}>
+        <p style={{ fontSize: 13, color: ARGILE.muted, margin: 0 }}>
+          {loading ? 'Chargement des flux…' : cacheDateLabel
+            ? `${cacheDateLabel} · ${(articles||[]).length} article${(articles||[]).length > 1 ? 's' : ''}`
+            : 'Aucun article chargé.'}
+        </p>
+        {!loading && (
+          <button onClick={() => { setArticles(null); setCacheDate(null); LS.setJSON('bt_news_cache', null); loadFeeds(); }} style={{
+            fontSize: 11, color: ARGILE.clay, background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.1em', padding: '2px 8px',
+            borderRadius: 100, background: 'rgba(184,88,57,0.10)',
+          }}>↺ Rafraîchir</button>
+        )}
+      </div>
 
-      {articles.length === 0 ? (
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: ARGILE.muted, fontSize: 14 }}>
+          Lecture des flux RSS…
+        </div>
+      ) : !articles || articles.length === 0 ? (
         <div style={{
           padding: '32px 24px', textAlign: 'center', borderRadius: 16,
           border: `1.5px dashed ${ARGILE.border}`, background: ARGILE.paper, marginBottom: 24,
@@ -149,8 +225,7 @@ function ArgileNews() {
             Aucun article
           </div>
           <div style={{ fontSize: 13, color: ARGILE.muted, lineHeight: 1.5 }}>
-            Les flux RSS sont configurés dans <code style={{ fontSize: 12 }}>base-rss.md</code>.<br />
-            Rafraîchis la page pour charger les derniers articles.
+            Les flux RSS sont configurés dans <code style={{ fontSize: 12 }}>base-rss.md</code>.
           </div>
         </div>
       ) : (
