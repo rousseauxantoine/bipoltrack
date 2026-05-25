@@ -1369,7 +1369,7 @@ function ArgileSettings() {
     try {
       const token   = await getGoogleToken();
       const payload = JSON.stringify({
-        app: 'BipolTrack', version: 2, exportedAt: new Date().toISOString(),
+        app: 'BipolTrack', schemaVersion: BT_SCHEMA_VERSION, exportedAt: new Date().toISOString(),
         entries:       LS.getJSON('bt_entries', []),
         meds:          LS.getJSON('bt_meds',    []),
         patientName:   LS.get('bt_patient_name'),
@@ -1417,10 +1417,11 @@ function ArgileSettings() {
       const fileId = search.files?.[0]?.id;
       if (!fileId) { setSyncFeedback('aucune sauvegarde trouvée'); setTimeout(() => setSyncFeedback(''), 4000); return; }
 
-      const file = await fetch(
+      const raw  = await fetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
         { headers: { Authorization: `Bearer ${token}` } }
       ).then(r => r.json());
+      const file = migrateData(raw); // migration automatique si schéma ancien
 
       if (file.entries)       LS.setJSON('bt_entries', file.entries);
       if (file.meds)          LS.setJSON('bt_meds',    file.meds);

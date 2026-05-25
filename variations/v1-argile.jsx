@@ -59,32 +59,57 @@ function normMoodTo100(entry) {
   return m <= 10 ? Math.round(m * 10) : m;
 }
 
+// Résout la zone humeur (nouvelle échelle) pour une entrée
+// Priorité à entry.humeur (schéma v2) ; fallback sur entry.mood pour les entrées legacy
+function humeurZoneOf(entry) {
+  if (!entry) return null;
+  if (entry.humeur) {
+    return ARGILE_HUMEUR_OPTS.find(z => z.id === entry.humeur) || ARGILE_HUMEUR_OPTS[1];
+  }
+  const m = normMoodTo100(entry);
+  if (m == null) return null;
+  if (m <= 35) return ARGILE_HUMEUR_OPTS[0]; // tristesse
+  if (m <= 65) return ARGILE_HUMEUR_OPTS[1]; // sérénité
+  return ARGILE_HUMEUR_OPTS[2];              // euphorie
+}
+
 function computeStats30(entries) {
   const days30 = [];
   for (let i = 29; i >= 0; i--) {
     const key = utcDayStr(i);
     days30.push({ key, entry: entries.find(e => e.date === key) || null });
   }
-  const withMood = days30.filter(d => d.entry && normMoodTo100(d.entry) != null);
-  const moods = withMood.map(d => normMoodTo100(d.entry));
   const sleeps = days30.filter(d => d.entry && d.entry.sleep != null).map(d => d.entry.sleep);
+  const withHumeur = days30.filter(d => d.entry && humeurZoneOf(d.entry) != null);
+  const humeurs = withHumeur.map(d => humeurZoneOf(d.entry));
 
-  const sorted = [...moods].sort((a, b) => a - b);
-  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
-  const medianZone = median != null ? argileZoneOf(median) : null;
+  // Médiane sur l'index ordinal (0=tristesse, 1=sérénité, 2=euphorie)
+  const ordinals = humeurs.map(h => ARGILE_HUMEUR_OPTS.indexOf(h));
+  const sortedOrd = [...ordinals].sort((a, b) => a - b);
+  const medianIdx = sortedOrd.length ? sortedOrd[Math.floor(sortedOrd.length / 2)] : null;
+  const medianZone = medianIdx != null ? ARGILE_HUMEUR_OPTS[medianIdx] : null;
+
   const sleepAvg = sleeps.length
     ? (sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1).replace('.', ',')
     : null;
 
-  const sparkline = days30.map(d => d.entry ? normMoodTo100(d.entry) : null);
-  const total = withMood.length || 1;
-  const zoneCounts = ARGILE_ZONES.map(z => ({
+  // Sparkline : chaque point = { v (position Y 0-100), color }
+  const sparkline = days30.map(d => {
+    if (!d.entry) return null;
+    const zone = humeurZoneOf(d.entry);
+    if (!zone) return null;
+    const v = normMoodTo100(d.entry) ?? zone.moodVal;
+    return { v, color: zone.color };
+  });
+
+  const total = withHumeur.length || 1;
+  const zoneCounts = ARGILE_HUMEUR_OPTS.map(z => ({
     zone: z.label, color: z.color,
-    days: moods.filter(v => argileZoneOf(v).id === z.id).length,
+    days: humeurs.filter(h => h.id === z.id).length,
     total,
   }));
 
-  return { sparkline, medianZone, sleepAvg, zoneCounts, recordedDays: withMood.length };
+  return { sparkline, medianZone, sleepAvg, zoneCounts, recordedDays: withHumeur.length };
 }
 
 // ── Options des 3 dimensions du Journal ──────────────────────────────
@@ -761,14 +786,14 @@ function ArgileStats() {
           <line x1="0" y1="45" x2="300" y2="45" stroke={ARGILE.border} strokeDasharray="2 4" />
           {(() => {
             const pts = sparkline
-              .map((v, i) => v != null ? { x: (i / 29) * 300, y: 90 - (v / 100) * 80 - 5, i } : null)
+              .map((pt, i) => pt != null ? { x: (i / 29) * 300, y: 90 - (pt.v / 100) * 80 - 5, color: pt.color, i } : null)
               .filter(Boolean);
             if (pts.length === 0) return (
               <text x="150" y="50" textAnchor="middle" fontSize="11" fill={ARGILE.muted} fontFamily="JetBrains Mono, monospace">Aucune donnée</text>
             );
             return <>
-              {pts.length > 1 && <polyline points={pts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={ARGILE.clay} strokeWidth="1.5" opacity="0.4" />}
-              {pts.map((p, j) => <circle key={p.i} cx={p.x} cy={p.y} r={j === pts.length - 1 ? 4 : 2.4} fill={ARGILE.clay} opacity={0.5 + (j / Math.max(1, pts.length - 1)) * 0.5} />)}
+              {pts.length > 1 && <polyline points={pts.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={ARGILE.muted} strokeWidth="1.5" opacity="0.25" />}
+              {pts.map((p, j) => <circle key={p.i} cx={p.x} cy={p.y} r={j === pts.length - 1 ? 4.5 : 2.8} fill={p.color} opacity={0.55 + (j / Math.max(1, pts.length - 1)) * 0.45} />)}
             </>;
           })()}
         </svg>
