@@ -1242,7 +1242,7 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
     const cur = new Date(date + 'T12:00:00');
     const end = repeatUntil && repeatUntil > date
       ? new Date(repeatUntil + 'T12:00:00')
-      : cur;
+      : new Date(date + 'T12:00:00');
     while (cur <= end) {
       dates.push(cur.toISOString().slice(0, 10));
       cur.setDate(cur.getDate() + 1);
