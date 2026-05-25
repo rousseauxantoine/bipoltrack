@@ -112,6 +112,49 @@ function ArgileEmpty({ onStart }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// DRIVE — sync automatique silencieuse (token sessionStorage uniquement, pas de popup)
+// ══════════════════════════════════════════════════════════════════════
+async function driveAutoSync() {
+  const clientId = LS.get('bt_drive_client_id');
+  if (!clientId) return;
+  const token  = sessionStorage.getItem('bt_google_token');
+  const expiry = sessionStorage.getItem('bt_google_token_expiry');
+  if (!token || !expiry || Date.now() >= +expiry) return; // pas de token frais → skip silencieux
+
+  try {
+    const payload = JSON.stringify({
+      app: 'BipolTrack', schemaVersion: BT_SCHEMA_VERSION, exportedAt: new Date().toISOString(),
+      entries:       LS.getJSON('bt_entries', []),
+      meds:          LS.getJSON('bt_meds',    []),
+      patientName:   LS.get('bt_patient_name'),
+      patientDob:    LS.get('bt_patient_dob'),
+      patientDoctor: LS.get('bt_patient_doctor'),
+    }, null, 2);
+    const filename = 'bipoltrack-backup.json';
+    const search   = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${filename}'+and+trashed=false`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    ).then(r => r.json());
+    const fileId = search.files?.[0]?.id;
+    const form   = new FormData();
+    form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/json' })], { type: 'application/json' }));
+    form.append('file',     new Blob([payload], { type: 'application/json' }));
+    const res = await fetch(
+      fileId
+        ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,
+      { method: fileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+    );
+    if (res.ok) {
+      LS.set('bt_last_synced', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+    }
+  } catch (e) {
+    console.warn('driveAutoSync:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // NEWS — synthèse IA + RSS
 // ══════════════════════════════════════════════════════════════════════
 const NEWS_RSS_PROXY    = 'https://api.rss2json.com/v1/api.json?rss_url=';
@@ -731,6 +774,7 @@ function ArgileMeds() {
     const newMed = { id: Date.now().toString(), name: form.name.trim(), dose: form.dose.trim(), qty: form.qty.trim(), freq: form.freq, notes: form.notes.trim(), start: form.start, active: true };
     const all = [...LS.getJSON('bt_meds', []), newMed];
     LS.set('bt_meds', JSON.stringify(all));
+    driveAutoSync();
     setMeds(all.filter(m => m.active !== false));
     setShowModal(false);
     setForm({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
@@ -1079,12 +1123,14 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
       if (idx >= 0) all[idx] = dayEntry; else all.push(dayEntry);
     });
     LS.setJSON('bt_entries', all);
+    driveAutoSync();
     onSave(base);
   };
 
   const handleDelete = () => {
     if (!entry) { onClose(); return; }
     LS.setJSON('bt_entries', LS.getJSON('bt_entries', []).filter(e => e.date !== date));
+    driveAutoSync();
     onSave(null);
   };
 
