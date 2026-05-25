@@ -387,7 +387,7 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
           position: 'absolute',
           left: `calc(${orbX}% - 28px)`,
           top: 4, width: 56, height: 56, borderRadius: '50%',
-          background: orbBg,
+          background: mascots ? 'transparent' : orbBg,
           boxShadow: grab
             ? '0 10px 24px rgba(43,24,16,0.45), inset 0 -4px 8px rgba(43,24,16,0.3)'
             : '0 6px 14px rgba(43,24,16,0.35), inset 0 -3px 6px rgba(43,24,16,0.25)',
@@ -395,7 +395,23 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
           transition: grab
             ? 'transform 0.1s'
             : 'left 0.28s cubic-bezier(0.3,1.4,0.5,1), transform 0.15s, box-shadow 0.18s',
-        }} />
+          overflow: 'hidden',
+        }}>
+          {mascots && mascots[value] && (
+            <img
+              key={value}
+              src={mascots[value]}
+              alt={opts[value].label}
+              style={{
+                width: '100%', height: '100%',
+                objectFit: 'cover', objectPosition: 'center top',
+                borderRadius: '50%',
+                animation: 'argile-mascot-in 0.28s cubic-bezier(0.2,1.3,0.5,1) both',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Étiquettes des 3 positions */}
@@ -410,20 +426,6 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
         ))}
       </div>
 
-      {/* Mascotte — affichée uniquement si la prop mascots est fournie */}
-      {mascots && mascots[value] && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
-          <img
-            key={value}
-            src={mascots[value]}
-            alt={opts[value].label}
-            style={{
-              width: 140, height: 140, objectFit: 'contain',
-              animation: 'argile-mascot-in 0.35s cubic-bezier(0.2,1.3,0.5,1) both',
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }
