@@ -222,7 +222,7 @@ describe('computeAvgPhaseDurationArgile', () => {
       { date: dayStr(5),  mood: 80 }, // up (transition after 10 days)
       { date: dayStr(0),  mood: 20 }, // down (transition after 5 days)
     ];
-    // durations: [10, 5] → avg = 7 (Math.round(7.5) = 8, actually 15/2=7.5 → 8)
+    // durations: [10, 5] → avg = Math.round(7.5) = 8
     const result = computeAvgPhaseDurationArgile(entries);
     expect(result).toBe(8);
   });
