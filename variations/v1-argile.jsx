@@ -501,71 +501,122 @@ function ArgileJournalSaisie({ onNext }) {
 function ArgileJournalTraitements({ onSave }) {
   const lsMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
   const [checkedMeds, setCheckedMeds] = useStateA(() => lsMeds.map(m => m.id));
+  const [showConfirm, setShowConfirm] = useStateA(false);
   const toggleMed = (id) => setCheckedMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
 
   const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
 
+  const handleSave = () => {
+    if (lsMeds.length > 0 && checkedMeds.length === 0) {
+      setShowConfirm(true);
+    } else {
+      onSave(checkedMeds);
+    }
+  };
+
   return (
-    <div style={{ padding: '0 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
-          {todayLabel}
-        </p>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[0, 1].map(i => <div key={i} style={{ width: 24, height: 3, borderRadius: 2, background: ARGILE.clay }} />)}
+    <>
+      <div style={{ padding: '0 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
+            {todayLabel}
+          </p>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[0, 1].map(i => <div key={i} style={{ width: 24, height: 3, borderRadius: 2, background: ARGILE.clay }} />)}
+          </div>
         </div>
+
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 8px' }}>
+          Les traitements
+        </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 36, lineHeight: 1.0, margin: '0 0 24px', color: ARGILE.ink, fontWeight: 400 }}>
+          Ce que tu as <span style={{ fontStyle: 'italic' }}>pris</span>.
+        </h2>
+
+        {lsMeds.length === 0 ? (
+          <p style={{ fontSize: 14, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.6 }}>
+            Aucun traitement configuré.<br/>
+            Rends-toi dans <em>Soins</em> pour en ajouter.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
+            {lsMeds.map(m => {
+              const sel    = checkedMeds.includes(m.id);
+              const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
+              return (
+                <button key={m.id} onClick={() => toggleMed(m.id)} style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px',
+                  borderRadius: 16, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
+                  background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer', textAlign: 'left',
+                }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                    border: `2px solid ${sel ? ARGILE.clay : ARGILE.muted}`,
+                    background: sel ? ARGILE.clay : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {sel && <svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5 L4 7.5 L10 1" stroke="#FBF6EB" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, lineHeight: 1.1 }}>{m.name}</div>
+                    {detail && <div style={{ fontSize: 12, color: ARGILE.muted, marginTop: 3 }}>{detail}</div>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <button onClick={handleSave} style={{
+          width: '100%', padding: '18px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
+          fontStyle: 'italic', fontSize: 20, cursor: 'pointer',
+          boxShadow: '0 6px 16px rgba(184,88,57,0.25)',
+        }}>
+          Fermer la journée
+        </button>
       </div>
 
-      <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 8px' }}>
-        Les traitements
-      </p>
-      <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 36, lineHeight: 1.0, margin: '0 0 24px', color: ARGILE.ink, fontWeight: 400 }}>
-        Ce que tu as <span style={{ fontStyle: 'italic' }}>pris</span>.
-      </h2>
-
-      {lsMeds.length === 0 ? (
-        <p style={{ fontSize: 14, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.6 }}>
-          Aucun traitement configuré.<br/>
-          Rends-toi dans <em>Soins</em> pour en ajouter.
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-          {lsMeds.map(m => {
-            const sel    = checkedMeds.includes(m.id);
-            const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
-            return (
-              <button key={m.id} onClick={() => toggleMed(m.id)} style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px',
-                borderRadius: 16, border: `1.5px solid ${sel ? ARGILE.clay : ARGILE.border}`,
-                background: sel ? 'rgba(184,88,57,0.08)' : ARGILE.paper, cursor: 'pointer', textAlign: 'left',
-              }}>
-                <div style={{
-                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-                  border: `2px solid ${sel ? ARGILE.clay : ARGILE.muted}`,
-                  background: sel ? ARGILE.clay : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {sel && <svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5 L4 7.5 L10 1" stroke="#FBF6EB" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, lineHeight: 1.1 }}>{m.name}</div>
-                  {detail && <div style={{ fontSize: 12, color: ARGILE.muted, marginTop: 3 }}>{detail}</div>}
-                </div>
-              </button>
-            );
-          })}
+      {showConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(43,24,16,0.45)', backdropFilter: 'blur(8px)',
+          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20, boxSizing: 'border-box',
+        }}>
+          <div style={{
+            background: ARGILE.paper, borderRadius: 24, padding: '28px 20px',
+            border: `1.5px solid ${ARGILE.border}`, width: '100%', maxWidth: 330,
+            boxShadow: '0 16px 36px rgba(43,24,16,0.25)', boxSizing: 'border-box',
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase' }}>Confirmation</span>
+              <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 28, fontStyle: 'italic', color: ARGILE.ink, margin: '6px 0 0', fontWeight: 400, lineHeight: 1.1 }}>
+                Aucun traitement
+              </h2>
+            </div>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: ARGILE.ink2, textAlign: 'center', margin: '0 0 24px' }}>
+              Aucun traitement enregistré pour la journée, confirmez-vous la saisie de la journée ?
+            </p>
+            <button onClick={() => onSave([])} style={{
+              width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
+              background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
+              fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
+              boxShadow: '0 6px 16px rgba(184,88,57,0.25)', marginBottom: 10, display: 'block',
+            }}>
+              Je confirme
+            </button>
+            <button onClick={() => setShowConfirm(false)} style={{
+              width: '100%', padding: '14px 20px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 100,
+              background: 'transparent', color: ARGILE.ink2, fontFamily: 'DM Sans, sans-serif',
+              fontSize: 15, cursor: 'pointer', display: 'block',
+            }}>
+              Revenir aux traitements
+            </button>
+          </div>
         </div>
       )}
-
-      <button onClick={() => onSave(checkedMeds)} style={{
-        width: '100%', padding: '18px 20px', border: 'none', borderRadius: 100,
-        background: ARGILE.clay, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
-        fontStyle: 'italic', fontSize: 20, cursor: 'pointer',
-        boxShadow: '0 6px 16px rgba(184,88,57,0.25)',
-      }}>
-        Fermer la journée
-      </button>
-    </div>
+    </>
   );
 }
 
