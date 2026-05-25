@@ -180,6 +180,7 @@ function ArgileMoodOrb({ value, onChange, finish = 'lisse' }) {
       <style>{`
         @keyframes argile-ripple { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(2.2); opacity: 0; } }
         @keyframes argile-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+        @keyframes argile-mascot-in { 0% { transform: scale(0.78) translateY(10px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
       `}</style>
       <div ref={ref} onPointerDown={onDown} style={{
         position: 'relative', height: 72, borderRadius: 36,
@@ -314,7 +315,7 @@ function ArgilePhaseHeader({ phase, total = 3, date }) {
 
 // ───── Slider snap 3 positions (partagé entre les 3 dimensions) ─────
 // opts = [{id, label, color}, ...] — toujours 3 éléments dans l'ordre bas→milieu→haut
-function ArgileSnapSlider({ dimLabel, opts, value, onChange }) {
+function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
   const ref = useRefA(null);
   const [grab, setGrab]   = useStateA(false);
   const [rawX, setRawX]   = useStateA(value * 50); // position continue pendant le glissement
@@ -408,6 +409,21 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange }) {
           }}>{o.label}</span>
         ))}
       </div>
+
+      {/* Mascotte — affichée uniquement si la prop mascots est fournie */}
+      {mascots && mascots[value] && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+          <img
+            key={value}
+            src={mascots[value]}
+            alt={opts[value].label}
+            style={{
+              width: 140, height: 140, objectFit: 'contain',
+              animation: 'argile-mascot-in 0.35s cubic-bezier(0.2,1.3,0.5,1) both',
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
