@@ -369,14 +369,47 @@ function moodPhaseArgile(mood) {
   return null;
 }
 
-function computePhaseProjectionsArgile(entries) {
-  if (!entries.length) return { map: {}, fromDate: null, phase: null };
+function computeAvgPhaseDurationArgile(entries, windowDays = 90) {
+  const todayStr   = new Date().toISOString().slice(0, 10);
+  const cutoffDate = new Date(todayStr + 'T00:00:00');
+  cutoffDate.setDate(cutoffDate.getDate() - windowDays);
+  const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+
+  const relevant = [...entries]
+    .filter(e => e.date >= cutoffStr && moodPhaseArgile(e.mood) !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (relevant.length < 2) return PHASE_DAYS_ARGILE;
+
+  const durations = [];
+  let segStart = relevant[0].date;
+  let segPhase = moodPhaseArgile(relevant[0].mood);
+
+  for (let i = 1; i < relevant.length; i++) {
+    const p = moodPhaseArgile(relevant[i].mood);
+    if (p !== segPhase) {
+      const start = new Date(segStart + 'T00:00:00');
+      const end   = new Date(relevant[i].date + 'T00:00:00');
+      durations.push(Math.round((end - start) / 86400000));
+      segStart = relevant[i].date;
+      segPhase = p;
+    }
+  }
+
+  if (!durations.length) return PHASE_DAYS_ARGILE;
+
+  const avg = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+  return Math.max(7, Math.min(90, avg));
+}
+
+function computePhaseProjectionsArgile(entries, algo = '21j') {
+  if (!entries.length) return { map: {}, fromDate: null, phase: null, cycleDays: PHASE_DAYS_ARGILE };
 
   const sorted = [...entries]
     .filter(e => moodPhaseArgile(e.mood) !== null)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  if (!sorted.length) return { map: {}, fromDate: null, phase: null };
+  if (!sorted.length) return { map: {}, fromDate: null, phase: null, cycleDays: PHASE_DAYS_ARGILE };
 
   const simMap    = {};
   const todayStr  = new Date().toISOString().slice(0, 10);
@@ -402,21 +435,25 @@ function computePhaseProjectionsArgile(entries) {
     if (p !== currentPhase) { lastChangeDate = sorted[i].date; currentPhase = p; }
   }
 
-  // Projection future — 168 jours (8 cycles de 21 j)
+  const cycleDays = algo === 'regression90'
+    ? computeAvgPhaseDurationArgile(entries)
+    : PHASE_DAYS_ARGILE;
+
+  // Projection future — 8 cycles
   const todayDate       = new Date(todayStr + 'T00:00:00');
   const changeDate      = new Date(lastChangeDate + 'T00:00:00');
   const daysSinceChange = Math.round((todayDate - changeDate) / 86400000);
 
-  for (let i = 1; i <= PHASE_DAYS_ARGILE * 8; i++) {
+  for (let i = 1; i <= cycleDays * 8; i++) {
     const totalDays = daysSinceChange + i;
-    const cycle     = Math.floor(totalDays / PHASE_DAYS_ARGILE) % 2;
+    const cycle     = Math.floor(totalDays / cycleDays) % 2;
     const phase     = cycle === 0 ? currentPhase : (currentPhase === 'down' ? 'up' : 'down');
     const d = new Date(todayDate);
     d.setDate(d.getDate() + i);
     simMap[d.toISOString().slice(0, 10)] = phase;
   }
 
-  return { map: simMap, fromDate: lastChangeDate, phase: currentPhase };
+  return { map: simMap, fromDate: lastChangeDate, phase: currentPhase, cycleDays };
 }
 
 function fmtDateFR(iso) {
@@ -429,9 +466,17 @@ function fmtDateFR(iso) {
 // STATS DEEP — calendrier annuel + graphes (données réelles)
 // ══════════════════════════════════════════════════════════════════════
 function ArgileStatsDeep() {
-  const [year,       setYear]       = useStateAx(new Date().getFullYear());
-  const [refreshKey, setRefreshKey] = useStateAx(0);
-  const [editDate,   setEditDate]   = useStateAx(null);
+  const [year,              setYear]              = useStateAx(new Date().getFullYear());
+  const [refreshKey,        setRefreshKey]        = useStateAx(0);
+  const [editDate,          setEditDate]          = useStateAx(null);
+  const [phaseAlgoRefresh,  setPhaseAlgoRefresh]  = useStateAx(0);
+
+  const { useEffect: useEffectStats } = React;
+  useEffectStats(() => {
+    const handler = () => setPhaseAlgoRefresh(k => k + 1);
+    window.addEventListener('bipoltrack:phaseAlgoChanged', handler);
+    return () => window.removeEventListener('bipoltrack:phaseAlgoChanged', handler);
+  }, []);
 
   // ── Données réelles depuis bt_entries ────────────────────────────
   const allEntries = useMemoAx(() =>
@@ -501,10 +546,13 @@ function ArgileStatsDeep() {
   // 30 dernières entrées pour sparkline
   const last30 = useMemoAx(() => allEntries.slice(-30), [allEntries]);
 
-  // Simulation des phases (V1 adaptée échelle 0-100)
-  const { map: projMap, fromDate: projFromDate, phase: projPhase } = useMemoAx(
-    () => computePhaseProjectionsArgile(allEntries),
-    [allEntries]
+  // Simulation des phases
+  const { map: projMap, fromDate: projFromDate, phase: projPhase, cycleDays: projCycleDays } = useMemoAx(
+    () => {
+      const algo = LS.get('bt_phase_algo') || '21j';
+      return computePhaseProjectionsArgile(allEntries, algo);
+    },
+    [allEntries, phaseAlgoRefresh]
   );
 
   // Distribution heures de sommeil
@@ -671,8 +719,10 @@ function ArgileStatsDeep() {
 
       {/* ── Calendrier annuel (données réelles + simulation) ── */}
       <div style={{ background: ARGILE.paper, padding: '20px 16px 16px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-          Calendrier annuel · {year}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <button onClick={() => setYear(y => y - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', color: ARGILE.muted, fontSize: 14, lineHeight: 1 }}>‹</button>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', flex: 1 }}>Calendrier annuel · {year}</span>
+          <button onClick={() => setYear(y => y + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', color: ARGILE.muted, fontSize: 14, lineHeight: 1 }}>›</button>
         </div>
         <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 16 }}>
           Le passé en couleur.
@@ -781,7 +831,13 @@ function ArgileStatsDeep() {
         <div style={{ marginTop: 12, padding: '8px 12px', background: ARGILE.sand2, borderRadius: 8 }}>
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.10em', color: ARGILE.muted, textTransform: 'uppercase', lineHeight: 1.6 }}>
             {projFromDate
-              ? `Simulation depuis le ${fmtDateFR(projFromDate)} · phase ${projPhase === 'up' ? 'haute' : 'basse'} · cycles de 21 jours`
+              ? (() => {
+                  const algo = LS.get('bt_phase_algo') || '21j';
+                  const algoLabel = algo === 'regression90'
+                    ? `cycles ~${projCycleDays}j · régression 90j`
+                    : `cycles de 21 jours · fixe`;
+                  return `Simulation depuis le ${fmtDateFR(projFromDate)} · phase ${projPhase === 'up' ? 'haute' : 'basse'} · ${algoLabel}`;
+                })()
               : 'Pas assez de données pour simuler les phases.'}
           </span>
         </div>
@@ -1568,12 +1624,19 @@ function ArgileSettings() {
   const [patientDoctor, setPatientDoctor] = useStateAx(LS.get('bt_patient_doctor'));
   const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
   const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
+  const [phaseAlgo,     setPhaseAlgo]     = useStateAx(LS.get('bt_phase_algo') || '21j');
   const [exportFeedback,  setExportFeedback]  = useStateAx('');
   const [syncMessage,     setSyncMessage]    = useStateAx('');
   const [backupFeedback,  setBackupFeedback] = useStateAx('');
   const [syncFeedback,    setSyncFeedback]   = useStateAx('');
 
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
+
+  const handlePhaseAlgoChange = (v) => {
+    setPhaseAlgo(v);
+    LS.set('bt_phase_algo', v);
+    window.dispatchEvent(new CustomEvent('bipoltrack:phaseAlgoChanged'));
+  };
 
   const saveDriveId = (v) => {
     saveField('bt_drive_client_id', v, setDriveId);
@@ -1752,6 +1815,21 @@ function ArgileSettings() {
           onTrailing={exportCSV} last />
       </ArgileSettingsGroup>
 
+      <ArgileSettingsGroup label="Simulation des phases">
+        <ArgileSegmentRow
+          icon="~"
+          title="Algorithme d'anticipation"
+          desc={phaseAlgo === 'regression90' ? 'Durée estimée depuis les 90 derniers jours' : 'Cycle fixe de 21 jours depuis le dernier changement'}
+          options={[
+            { value: '21j',          label: '21 jours · fixe' },
+            { value: 'regression90', label: 'Régression · 90j' },
+          ]}
+          value={phaseAlgo}
+          onChange={handlePhaseAlgoChange}
+          last
+        />
+      </ArgileSettingsGroup>
+
       <ArgileSettingsGroup label="Sources d'information">
         <ArgileSettingsRow icon="◍" title="Flux RSS" value="Configurés dans base-rss.md" last />
       </ArgileSettingsGroup>
@@ -1777,6 +1855,38 @@ function ArgileSettings() {
       <p style={{ fontSize: 12, color: ARGILE.muted, textAlign: 'center', marginTop: 8, lineHeight: 1.5, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
         « Tes données restent ici, sur ton appareil. »
       </p>
+    </div>
+  );
+}
+
+function ArgileSegmentRow({ icon, title, desc, options, value, onChange, last }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 16px', borderBottom: last ? 'none' : `1px solid ${ARGILE.border}` }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0, marginTop: 2 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500 }}>{title}</div>
+        {desc && <div style={{ fontSize: 11, color: ARGILE.muted, marginTop: 2 }}>{desc}</div>}
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onChange(opt.value)}
+              style={{
+                flex: 1, padding: '7px 8px',
+                background: value === opt.value ? ARGILE.clay : ARGILE.sand2,
+                color: value === opt.value ? ARGILE.paper : ARGILE.ink2,
+                border: 'none', borderRadius: 8,
+                fontSize: 11, cursor: 'pointer',
+                fontFamily: 'DM Sans, sans-serif',
+                fontWeight: value === opt.value ? 600 : 400,
+                textAlign: 'center', lineHeight: 1.3,
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2102,9 +2212,11 @@ function ArgileTutorial({ onClose }) {
       position: 'absolute', inset: 0, zIndex: 400,
       background: 'rgba(43,24,16,0.50)',
       display: 'flex', alignItems: 'flex-end',
+      overflow: 'hidden',
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: '100%', maxHeight: '88vh', overflowY: 'auto',
+        overscrollBehavior: 'contain',
         background: ARGILE.sand, borderRadius: '20px 20px 0 0',
         padding: '16px 24px 48px', boxSizing: 'border-box',
       }}>

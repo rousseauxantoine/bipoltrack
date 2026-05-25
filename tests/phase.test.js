@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 import {
   moodPhaseArgile,
   computePhaseProjectionsArgile,
+  computeAvgPhaseDurationArgile,
   PHASE_DAYS_ARGILE,
 } from '../lib/core.js';
 
@@ -180,5 +181,112 @@ describe('computePhaseProjectionsArgile', () => {
       expect(result.map[dayStr(8)]).toBe('down');
       expect(result.map[dayStr(4)]).toBe('up');
     });
+  });
+});
+
+// ── computeAvgPhaseDurationArgile ─────────────────────────────────────
+
+describe('computeAvgPhaseDurationArgile', () => {
+  it('returns PHASE_DAYS_ARGILE when no entries', () => {
+    expect(computeAvgPhaseDurationArgile([])).toBe(PHASE_DAYS_ARGILE);
+  });
+
+  it('returns PHASE_DAYS_ARGILE when only one phase entry (no transition)', () => {
+    const entries = [{ date: dayStr(10), mood: 25 }];
+    expect(computeAvgPhaseDurationArgile(entries)).toBe(PHASE_DAYS_ARGILE);
+  });
+
+  it('returns PHASE_DAYS_ARGILE when all entries are same phase', () => {
+    const entries = [
+      { date: dayStr(20), mood: 25 },
+      { date: dayStr(10), mood: 30 },
+      { date: dayStr(5),  mood: 20 },
+    ];
+    expect(computeAvgPhaseDurationArgile(entries)).toBe(PHASE_DAYS_ARGILE);
+  });
+
+  it('calculates average duration from one transition', () => {
+    // down for 10 days, then up — single segment of 10 days
+    const entries = [
+      { date: dayStr(10), mood: 25 }, // down starts
+      { date: dayStr(0),  mood: 80 }, // up starts (transition)
+    ];
+    const result = computeAvgPhaseDurationArgile(entries);
+    expect(result).toBe(10);
+  });
+
+  it('averages multiple phase segments', () => {
+    // down 10 days → up 5 days → down (ignored, no end transition in window)
+    const entries = [
+      { date: dayStr(15), mood: 25 }, // down
+      { date: dayStr(5),  mood: 80 }, // up (transition after 10 days)
+      { date: dayStr(0),  mood: 20 }, // down (transition after 5 days)
+    ];
+    // durations: [10, 5] → avg = 7 (Math.round(7.5) = 8, actually 15/2=7.5 → 8)
+    const result = computeAvgPhaseDurationArgile(entries);
+    expect(result).toBe(8);
+  });
+
+  it('ignores entries outside the 90-day window', () => {
+    const entries = [
+      { date: dayStr(100), mood: 25 }, // outside window
+      { date: dayStr(95),  mood: 80 }, // outside window
+      { date: dayStr(10),  mood: 25 }, // inside window — single entry, no transition
+    ];
+    expect(computeAvgPhaseDurationArgile(entries)).toBe(PHASE_DAYS_ARGILE);
+  });
+
+  it('clamps result to minimum 7 days', () => {
+    // 3-day segment only
+    const entries = [
+      { date: dayStr(3), mood: 25 },
+      { date: dayStr(0), mood: 80 },
+    ];
+    const result = computeAvgPhaseDurationArgile(entries);
+    expect(result).toBe(7); // clamped from 3 to 7
+  });
+
+  it('clamps result to maximum 90 days', () => {
+    // 85-day segment — within window of 90
+    const entries = [
+      { date: dayStr(85), mood: 25 },
+      { date: dayStr(0),  mood: 80 },
+    ];
+    const result = computeAvgPhaseDurationArgile(entries);
+    expect(result).toBe(85); // 85 < 90, no clamp needed
+  });
+});
+
+// ── computePhaseProjectionsArgile — algo regression90 ─────────────────
+
+describe('computePhaseProjectionsArgile with regression90 algo', () => {
+  it('uses calculated cycle length instead of 21 days', () => {
+    // down 10 days → up: computed cycleDays = 10
+    const entries = [
+      { date: dayStr(10), mood: 25 },
+      { date: dayStr(0),  mood: 80 },
+    ];
+    const result = computePhaseProjectionsArgile(entries, 'regression90');
+    expect(result.cycleDays).toBe(10);
+  });
+
+  it('returns cycleDays = PHASE_DAYS_ARGILE for default algo', () => {
+    const entries = [{ date: TODAY, mood: 25 }];
+    const result = computePhaseProjectionsArgile(entries);
+    expect(result.cycleDays).toBe(PHASE_DAYS_ARGILE);
+  });
+
+  it('projects 8 cycles forward with calculated duration', () => {
+    // cycle = 10 days; project 80 days total
+    const entries = [
+      { date: dayStr(10), mood: 25 },
+      { date: dayStr(0),  mood: 80 },
+    ];
+    const result = computePhaseProjectionsArgile(entries, 'regression90');
+    const cycleDays = result.cycleDays; // 10
+    const maxFuture = dayStr(-(cycleDays * 8));
+    const beyondMax = dayStr(-(cycleDays * 8 + 1));
+    expect(result.map[maxFuture]).toBeDefined();
+    expect(result.map[beyondMax]).toBeUndefined();
   });
 });
