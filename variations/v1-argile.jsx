@@ -232,7 +232,7 @@ function ArgileShell({ children, active, onNav, hideHeader = false, hasNoData = 
     { id: 'stats',   label: 'Carnet' },
     { id: 'news',    label: 'News' },
     { id: 'meds',    label: 'Soins' },
-    { id: 'settings',label: '…' },
+    { id: 'settings',label: 'Settings' },
   ];
 
   // Last sync badge — lit bt_last_synced, se met à jour via l'event 'bipoltrack:synced'

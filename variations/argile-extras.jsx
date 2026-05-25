@@ -1697,7 +1697,7 @@ function ArgileSettings() {
 
   return (
     <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 80 }}>
-      <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Maison & maintenance</p>
+      <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: 0 }}>Paramètres</p>
       <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 38, lineHeight: 1.0, margin: '8px 0 24px', color: ARGILE.ink, fontWeight: 400 }}>
         <span style={{ fontStyle: 'italic' }}>Réglages</span>
       </h1>
