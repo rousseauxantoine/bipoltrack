@@ -4,6 +4,41 @@
 const { useState: useStateAx, useRef: useRefAx, useMemo: useMemoAx } = React;
 
 // ══════════════════════════════════════════════════════════════════════
+// MIGRATIONS — versioning du schéma de données
+// v1 : mood 1-10 (format legacy original)
+// v1.5 : mood 0-100, _migrated:true (migration intermédiaire)
+// v2 : humeur/pensees/energie qualitatifs + mood numérique pour rétrocompat
+// ══════════════════════════════════════════════════════════════════════
+const BT_SCHEMA_VERSION = 2;
+
+function _migrateEntry(e, moodScale) {
+  if (e.humeur) return e; // déjà migré
+  const moodNorm = moodScale === 1 ? (e.mood ?? 5) * 10 : (e.mood ?? 50);
+  const humeur   = moodNorm <= 35 ? 'tristesse' : moodNorm <= 65 ? 'sérénité' : 'euphorie';
+  const anxiety  = e.anxiety ?? 0;
+  const pensees  = anxiety <= 4 ? 'clarté' : anxiety <= 7 ? 'confusion' : 'profusion';
+  const sleep    = e.sleep;
+  const energie  =
+    humeur === 'euphorie' && sleep != null && sleep <= 5 ? 'agitation' :
+    sleep != null && sleep < 7                           ? 'épuisement' : 'bien-être';
+  return { ...e, humeur, pensees, energie, _migrated_v2: true };
+}
+
+function migrateData(raw) {
+  const sv = raw.schemaVersion ?? 0;
+  if (sv >= BT_SCHEMA_VERSION) return raw;
+  // v1 : version:1 explicite ou toutes les valeurs mood ≤ 10
+  const isV1 = raw.version === 1 ||
+    (raw.entries || []).every(e => (e.mood ?? 0) <= 10);
+  const moodScale = isV1 ? 1 : 10; // ×10 pour normaliser vers 0-100
+  return {
+    ...raw,
+    schemaVersion: BT_SCHEMA_VERSION,
+    entries: (raw.entries || []).map(e => _migrateEntry(e, moodScale)),
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // ÉTAT VIDE — Premier jour
 // ══════════════════════════════════════════════════════════════════════
 function ArgileEmpty({ onStart }) {
@@ -1128,6 +1163,8 @@ function ArgileSettings() {
 
   const exportJSON = () => {
     const data = {
+      schemaVersion: BT_SCHEMA_VERSION,
+      app: 'BipolTrack',
       entries: LS.getJSON('bt_entries'),
       meds:    LS.getJSON('bt_meds'),
       exportedAt: new Date().toISOString(),

@@ -407,7 +407,7 @@ function ArgileJournalSaisie({ onNext }) {
         </div>
       </div>
 
-      <ArgileSnapSlider dimLabel="01 — l'humeur"    opts={ARGILE_HUMEUR_OPTS}  value={humeur}  onChange={setHumeur}  />
+      <ArgileSnapSlider dimLabel="01 — l'humeur" opts={ARGILE_HUMEUR_OPTS} value={humeur} onChange={setHumeur} mascots={['assets/mascotte-sombre.png', 'assets/mascotte-stable.png', 'assets/mascotte-brulant.png']} />
       <ArgileSnapSlider dimLabel="02 — les pensées" opts={ARGILE_PENSEES_OPTS} value={pensees} onChange={setPensees} />
       <ArgileSnapSlider dimLabel="03 — l'énergie"   opts={ARGILE_ENERGIE_OPTS} value={energie} onChange={setEnergie} />
 
