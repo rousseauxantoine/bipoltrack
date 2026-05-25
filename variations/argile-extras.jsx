@@ -293,25 +293,20 @@ function ArgileStatsDeep() {
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   };
 
-  const zoneOf = v => {
-    if (v == null) return null;
-    if (v < 20) return { label: 'Sombre', color: '#6B5C84' };
-    if (v < 40) return { label: 'Bas',     color: '#A47A6C' };
-    if (v < 60) return { label: 'Stable',  color: '#C39265' };
-    if (v < 80) return { label: 'Haut',    color: '#D67A3C' };
-    return               { label: 'Brûlant',color: '#B85839' };
-  };
-
   const dateStr = (y, mi, d) =>
     `${y}-${String(mi + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
   // ── Calculs statistiques ──────────────────────────────────────────
-  const moods  = yearEntries.map(e => e.mood).filter(v => v != null);
   const sleeps = yearEntries.map(e => e.sleep).filter(v => v != null);
-
-  const moodMed  = median(moods);
   const sleepMed = median(sleeps);
-  const moodZone = zoneOf(moodMed);
+
+  // Médiane humeur (ordinal : 0=tristesse, 1=sérénité, 2=euphorie)
+  const humeurEntries = yearEntries.filter(e => humeurZoneOf(e) != null);
+  const humeurOrdinals = humeurEntries.map(e => ARGILE_HUMEUR_OPTS.indexOf(humeurZoneOf(e))).filter(i => i >= 0);
+  const sortedHumeurOrd = [...humeurOrdinals].sort((a, b) => a - b);
+  const medianHumeur = sortedHumeurOrd.length
+    ? ARGILE_HUMEUR_OPTS[sortedHumeurOrd[Math.floor(sortedHumeurOrd.length / 2)]]
+    : null;
 
   // Série : jours consécutifs à partir de la dernière entrée
   const streak = useMemoAx(() => {
@@ -328,14 +323,14 @@ function ArgileStatsDeep() {
     return count;
   }, [allEntries]);
 
-  // Distribution par zone
-  const zoneDist = useMemoAx(() => [
-    { label: 'Brûlant', color: '#B85839', count: yearEntries.filter(e => e.mood >= 80).length },
-    { label: 'Haut',    color: '#D67A3C', count: yearEntries.filter(e => e.mood >= 60 && e.mood < 80).length },
-    { label: 'Stable',  color: '#C39265', count: yearEntries.filter(e => e.mood >= 40 && e.mood < 60).length },
-    { label: 'Bas',     color: '#A47A6C', count: yearEntries.filter(e => e.mood >= 20 && e.mood < 40).length },
-    { label: 'Sombre',  color: '#6B5C84', count: yearEntries.filter(e => e.mood < 20).length },
-  ], [yearEntries]);
+  // Distribution par humeur (3 états)
+  const humeurDist = useMemoAx(() =>
+    ARGILE_HUMEUR_OPTS.map(opt => ({
+      label: opt.label,
+      color: opt.color,
+      count: yearEntries.filter(e => humeurZoneOf(e)?.id === opt.id).length,
+    })),
+  [yearEntries]);
 
   // 30 dernières entrées pour sparkline
   const last30 = useMemoAx(() => allEntries.slice(-30), [allEntries]);
@@ -407,10 +402,10 @@ function ArgileStatsDeep() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
         {[
           {
-            l: 'Médiane',
-            v: moodZone ? moodZone.label : '—',
-            c: moodZone ? moodZone.color : ARGILE.muted,
-            sub: moodMed != null ? `score ${Math.round(moodMed)}/100` : 'aucune donnée',
+            l: 'Humeur médiane',
+            v: medianHumeur ? medianHumeur.label : '—',
+            c: medianHumeur ? medianHumeur.color : ARGILE.muted,
+            sub: humeurEntries.length ? `sur ${humeurEntries.length} jour${humeurEntries.length > 1 ? 's' : ''}` : 'aucune donnée',
           },
           {
             l: 'Sommeil',
@@ -448,32 +443,32 @@ function ArgileStatsDeep() {
           {last30.length} dernière{last30.length > 1 ? 's' : ''} entrée{last30.length > 1 ? 's' : ''}
         </div>
         <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 12 }}>
-          {moodZone ? `Tendance : ${moodZone.label.toLowerCase()}.` : 'Ton évolution.'}
+          {medianHumeur ? `Tendance : ${medianHumeur.label.toLowerCase()}.` : 'Ton évolution.'}
         </div>
         {last30.length >= 2 ? (
           <>
             <svg viewBox="0 0 320 100" style={{ width: '100%', height: 100 }}>
-              <rect x="0" y="0"  width="320" height="20" fill="#B85839" opacity="0.06" />
-              <rect x="0" y="20" width="320" height="20" fill="#D67A3C" opacity="0.06" />
-              <rect x="0" y="40" width="320" height="20" fill="#C39265" opacity="0.09" />
-              <rect x="0" y="60" width="320" height="20" fill="#A47A6C" opacity="0.06" />
-              <rect x="0" y="80" width="320" height="20" fill="#6B5C84" opacity="0.06" />
+              <rect x="0" y="0"  width="320" height="33" fill={ARGILE_HUMEUR_OPTS[2].color} opacity="0.07" />
+              <rect x="0" y="33" width="320" height="34" fill={ARGILE_HUMEUR_OPTS[1].color} opacity="0.09" />
+              <rect x="0" y="67" width="320" height="33" fill={ARGILE_HUMEUR_OPTS[0].color} opacity="0.07" />
               <path
                 d={last30.map((e, i) => {
+                  const hz = humeurZoneOf(e);
                   const x = (i / (last30.length - 1)) * 316 + 2;
-                  const y = 95 - ((e.mood ?? 50) / 100) * 88;
+                  const y = 95 - ((hz ? hz.moodVal : 50) / 100) * 88;
                   return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
                 }).join(' ')}
                 fill="none" stroke={ARGILE.clay} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
               />
               {last30.map((e, i) => {
+                const hz = humeurZoneOf(e);
                 const x = (i / (last30.length - 1)) * 316 + 2;
-                const y = 95 - ((e.mood ?? 50) / 100) * 88;
-                return <circle key={i} cx={x} cy={y} r={i === last30.length - 1 ? 4 : 2} fill={ARGILE.clay} opacity={0.45 + (i / last30.length) * 0.55} />;
+                const y = 95 - ((hz ? hz.moodVal : 50) / 100) * 88;
+                return <circle key={i} cx={x} cy={y} r={i === last30.length - 1 ? 4 : 2} fill={hz ? hz.color : ARGILE.clay} opacity={0.45 + (i / last30.length) * 0.55} />;
               })}
             </svg>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              <span>Brûlant</span><span>Haut</span><span>Stable</span><span>Bas</span><span>Sombre</span>
+              <span>Euphorie</span><span>Sérénité</span><span>Tristesse</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted }}>
               <span>{last30[0].date}</span>
@@ -487,18 +482,18 @@ function ArgileStatsDeep() {
         )}
       </div>
 
-      {/* ── Distribution par zone ── */}
+      {/* ── Distribution par humeur ── */}
       <div style={{ background: ARGILE.paper, padding: '18px 18px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
         <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', marginBottom: 4 }}>
-          Distribution par zone · {year}
+          Distribution par humeur · {year}
         </div>
         <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 14 }}>
           {yearEntries.length} journée{yearEntries.length > 1 ? 's' : ''} mesurée{yearEntries.length > 1 ? 's' : ''}.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {zoneDist.map(z => (
+          {humeurDist.map(z => (
             <div key={z.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.ink, width: 54, flexShrink: 0 }}>{z.label}</span>
+              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.ink, width: 62, flexShrink: 0 }}>{z.label}</span>
               <div style={{ flex: 1, height: 8, background: ARGILE.sand2, borderRadius: 4, overflow: 'hidden' }}>
                 <div style={{ width: yearEntries.length ? (z.count / yearEntries.length * 100) + '%' : '0%', height: '100%', background: z.color, borderRadius: 4 }} />
               </div>
@@ -531,14 +526,14 @@ function ArgileStatsDeep() {
                   const todayOutline = isToday ? { outline: `1.5px solid ${ARGILE.clay}`, outlineOffset: '-0.5px' } : {};
 
                   if (entry) {
-                    const z = zoneOf(entry.mood);
+                    const hz = humeurZoneOf(entry);
                     return (
                       <div key={di}
                         onClick={() => setEditDate(ds)}
-                        title={`${ds} · ${z ? z.label : '?'}`}
+                        title={`${ds} · ${hz ? hz.label : '?'}`}
                         style={{
                           height: 10, borderRadius: 2, cursor: 'pointer',
-                          background: z ? z.color : ARGILE.sand2,
+                          background: hz ? hz.color : ARGILE.sand2,
                           boxShadow: 'inset 0 -1px 0 rgba(43,24,16,0.10)',
                           ...todayOutline,
                         }} />
@@ -582,14 +577,10 @@ function ArgileStatsDeep() {
           ))}
         </div>
         <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 10, color: ARGILE.ink2 }}>
-          {[
-            { l: 'Sombre', c: '#6B5C84' }, { l: 'Bas', c: '#A47A6C' },
-            { l: 'Stable', c: '#C39265' }, { l: 'Haut', c: '#D67A3C' },
-            { l: 'Brûlant', c: '#B85839' },
-          ].map(z => (
-            <span key={z.l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 12, height: 10, background: z.c, borderRadius: 2, display: 'inline-block' }} />
-              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>{z.l}</span>
+          {ARGILE_HUMEUR_OPTS.map(z => (
+            <span key={z.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 12, height: 10, background: z.color, borderRadius: 2, display: 'inline-block' }} />
+              <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 12 }}>{z.label}</span>
             </span>
           ))}
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -957,9 +948,15 @@ const ARGILE_MENSTRUATION = [
 ];
 
 function ArgileEditEntry({ date, entry, onSave, onClose }) {
-  const [mood,         setMood]         = useStateAx(entry?.mood         ?? 50);
+  const [humeur,  setHumeur]  = useStateAx(() => {
+    const idx = ARGILE_HUMEUR_OPTS.findIndex(o => o.id === entry?.humeur);
+    if (idx >= 0) return idx;
+    const m = entry?.mood; if (m != null) { const n = m <= 10 ? m * 10 : m; return n <= 35 ? 0 : n <= 65 ? 1 : 2; }
+    return 1;
+  });
+  const [pensees, setPensees] = useStateAx(() => { const i = ARGILE_PENSEES_OPTS.findIndex(o => o.id === entry?.pensees); return i >= 0 ? i : 1; });
+  const [energie, setEnergie] = useStateAx(() => { const i = ARGILE_ENERGIE_OPTS.findIndex(o => o.id === entry?.energie); return i >= 0 ? i : 1; });
   const [sleep,        setSleep]        = useStateAx(entry?.sleep        ?? 7);
-  const [anxiety,      setAnxiety]      = useStateAx(entry?.anxiety      ?? 0);
   const [symptoms,     setSymptoms]     = useStateAx(entry?.symptoms     || []);
   const [checkedMeds,  setCheckedMeds]  = useStateAx(entry?.meds         || []);
   const [menstruation, setMenstruation] = useStateAx(entry?.menstruation || []);
@@ -979,9 +976,14 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
   })();
 
   const handleSave = () => {
+    const humeurId  = ARGILE_HUMEUR_OPTS[humeur].id;
+    const penseesId = ARGILE_PENSEES_OPTS[pensees].id;
+    const energieId = ARGILE_ENERGIE_OPTS[energie].id;
+    const moodVal   = ARGILE_HUMEUR_OPTS[humeur].moodVal;
     const all = LS.getJSON('bt_entries', []);
     const updated = {
-      date, mood, sleep, anxiety, symptoms, meds: checkedMeds, note,
+      date, humeur: humeurId, pensees: penseesId, energie: energieId, mood: moodVal,
+      sleep, symptoms, meds: checkedMeds, note,
       effects: entry?.effects || [], menstruation, ts: entry?.ts || Date.now(),
     };
     const idx = all.findIndex(e => e.date === date);
@@ -996,7 +998,6 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
     onSave(null);
   };
 
-  const zone = ARGILE_ZONES.find(z => mood >= z.range[0] && mood <= z.range[1]) || ARGILE_ZONES[2];
   const inputSt = { width: '100%', accentColor: ARGILE.clay };
   const chipSt  = (on) => ({
     padding: '6px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
@@ -1022,16 +1023,14 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
         <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>Édition</p>
         <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 22, fontWeight: 400, color: ARGILE.ink, margin: '0 0 20px' }}>{dateLabel}</h2>
 
-        {/* Humeur */}
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 8px' }}>
-            Humeur · <span style={{ color: zone.color }}>{zone.label}</span>
-          </p>
-          <ArgileMoodOrb value={mood} onChange={setMood} />
-        </div>
+        {/* 3 dimensions */}
+        <ArgileSnapSlider dimLabel="01 — l'humeur"  opts={ARGILE_HUMEUR_OPTS}  value={humeur}  onChange={setHumeur}
+          mascots={['assets/mascotte-sombre.png','assets/mascotte-stable.png','assets/mascotte-brulant.png']} />
+        <ArgileSnapSlider dimLabel="02 — les pensées" opts={ARGILE_PENSEES_OPTS} value={pensees} onChange={setPensees} />
+        <ArgileSnapSlider dimLabel="03 — l'énergie"   opts={ARGILE_ENERGIE_OPTS} value={energie} onChange={setEnergie} />
 
         {/* Sommeil */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 20 }}>
           <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' }}>
             Sommeil · {sleep}h
           </p>
@@ -1039,30 +1038,6 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
             onChange={e => setSleep(+e.target.value)} style={inputSt} />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
             <span>0h</span><span>6h</span><span>12h</span>
-          </div>
-        </div>
-
-        {/* Anxiété */}
-        <div style={{ marginBottom: 20 }}>
-          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' }}>
-            Anxiété · {anxiety}/10
-          </p>
-          <input type="range" min="0" max="10" step="1" value={anxiety}
-            onChange={e => setAnxiety(+e.target.value)} style={inputSt} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
-            <span>Aucune</span><span>Intense</span>
-          </div>
-        </div>
-
-        {/* Symptômes */}
-        <div style={{ marginBottom: 20 }}>
-          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 10px' }}>Symptômes</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {ARGILE_SYMPTOMS.map(s => (
-              <button key={s.id} onClick={() => tog(setSymptoms)(s.id)} style={chipSt(symptoms.includes(s.id))}>
-                {s.label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -1094,6 +1069,18 @@ function ArgileEditEntry({ date, entry, onSave, onClose }) {
             </div>
           </div>
         )}
+
+        {/* Symptômes */}
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 10px' }}>Symptômes</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {ARGILE_SYMPTOMS.map(s => (
+              <button key={s.id} onClick={() => tog(setSymptoms)(s.id)} style={chipSt(symptoms.includes(s.id))}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Menstruation */}
         <div style={{ marginBottom: 20 }}>

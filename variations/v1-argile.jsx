@@ -1024,4 +1024,8 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   );
 }
 
-Object.assign(window, { ArgileApp, ArgileShell, ArgileMoodOrb, ARGILE, ARGILE_ZONES, argileZoneOf, LS });
+Object.assign(window, {
+  ArgileApp, ArgileShell, ArgileMoodOrb, ArgileSnapSlider,
+  ARGILE, ARGILE_ZONES, ARGILE_HUMEUR_OPTS, ARGILE_PENSEES_OPTS, ARGILE_ENERGIE_OPTS,
+  argileZoneOf, humeurZoneOf, LS,
+});
