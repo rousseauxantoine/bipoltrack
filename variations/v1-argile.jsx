@@ -73,6 +73,7 @@ function humeurZoneOf(entry) {
   return ARGILE_HUMEUR_OPTS[2];              // euphorie
 }
 
+
 function computeStats30(entries) {
   const days30 = [];
   for (let i = 29; i >= 0; i--) {
