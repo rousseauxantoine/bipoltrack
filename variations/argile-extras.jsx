@@ -126,6 +126,7 @@ async function driveAutoSync() {
       app: 'BipolTrack', schemaVersion: BT_SCHEMA_VERSION, exportedAt: new Date().toISOString(),
       entries:       LS.getJSON('bt_entries', []),
       meds:          LS.getJSON('bt_meds',    []),
+      rssFeeds:      newsGetStoredFeeds(),
       patientName:   LS.get('bt_patient_name'),
       patientDob:    LS.get('bt_patient_dob'),
       patientDoctor: LS.get('bt_patient_doctor'),
@@ -207,11 +208,16 @@ function googleOAuthToken(clientId) {
 // ══════════════════════════════════════════════════════════════════════
 const NEWS_RSS_PROXY    = 'https://api.rss2json.com/v1/api.json?rss_url=';
 const NEWS_MAX_PER_FEED = 3;
+const RSS_FEEDS_KEY     = 'bt_rss_feeds';
 
 function newsStripHtml(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
+function newsIsValidFeedUrl(url) {
+  return typeof url === 'string' && /^https?:\/\/\S+$/i.test(url.trim());
 }
 
 async function newsLoadRssUrls() {
@@ -220,10 +226,53 @@ async function newsLoadRssUrls() {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const text = await resp.text();
     if (/<!doctype html|<html[\s>]/i.test(text)) return [];
-    return text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#') && /^https?:\/\/\S+$/i.test(l));
+    return text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#') && newsIsValidFeedUrl(l));
   } catch (e) {
     console.warn('base-rss.md:', e);
     return [];
+  }
+}
+
+// ── Flux RSS configurables (localStorage) ─────────────────────────────
+// Stockés sous forme [{ url, title }]. Null tant que jamais configuré :
+// on amorce alors depuis base-rss.md (flux proposés par défaut).
+function newsGetStoredFeeds() {
+  try {
+    const raw = localStorage.getItem(RSS_FEEDS_KEY);
+    if (raw === null) return null;
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : null;
+  } catch {
+    return null;
+  }
+}
+
+function newsSaveFeeds(feeds) {
+  LS.setJSON(RSS_FEEDS_KEY, feeds);
+  LS.setJSON('bt_news_cache', null); // force le rechargement des articles
+  window.dispatchEvent(new CustomEvent('bipoltrack:rssFeedsChanged'));
+}
+
+// Liste active des flux ; amorce depuis base-rss.md au premier lancement.
+async function newsResolveFeeds() {
+  const stored = newsGetStoredFeeds();
+  if (stored !== null) return stored;
+  const urls = await newsLoadRssUrls();
+  const seeded = urls.map(url => ({ url, title: '' }));
+  LS.setJSON(RSS_FEEDS_KEY, seeded);
+  return seeded;
+}
+
+// Teste la validité d'un flux via le proxy avant enregistrement.
+async function newsTestFeed(url) {
+  try {
+    const resp = await fetch(NEWS_RSS_PROXY + encodeURIComponent(url));
+    const data = await resp.json();
+    if (data.status !== 'ok') return { ok: false, error: data.message || 'flux invalide' };
+    const title = (data.feed && data.feed.title) || new URL(url).hostname;
+    return { ok: true, title };
+  } catch (e) {
+    return { ok: false, error: e.message || 'flux injoignable' };
   }
 }
 
@@ -256,7 +305,8 @@ function ArgileNews() {
 
   const loadFeeds = async () => {
     setLoading(true);
-    const urls = await newsLoadRssUrls();
+    const feeds = await newsResolveFeeds();
+    const urls = feeds.map(f => f.url).filter(Boolean);
     if (!urls.length) { setLoading(false); setArticles([]); return; }
     const results = await Promise.all(urls.map(newsFetchOneFeed));
     const all = results.flat().sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
@@ -269,6 +319,13 @@ function ArgileNews() {
 
   useEffectAx(() => {
     if (articles === null) loadFeeds();
+  }, []);
+
+  // Recharge si les flux RSS ont changé depuis les Réglages.
+  useEffectAx(() => {
+    const onChange = () => { setArticles(null); setCacheDate(null); loadFeeds(); };
+    window.addEventListener('bipoltrack:rssFeedsChanged', onChange);
+    return () => window.removeEventListener('bipoltrack:rssFeedsChanged', onChange);
   }, []);
 
   const formatPubDate = (d) => {
@@ -316,7 +373,7 @@ function ArgileNews() {
             Aucun article
           </div>
           <div style={{ fontSize: 13, color: ARGILE.muted, lineHeight: 1.5 }}>
-            Les flux RSS sont configurés dans <code style={{ fontSize: 12 }}>base-rss.md</code>.
+            Ajoute ou modifie tes flux RSS depuis les <span style={{ fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>Réglages</span>.
           </div>
         </div>
       ) : (
@@ -1658,6 +1715,7 @@ function ArgileSettings() {
       app: 'BipolTrack',
       entries: LS.getJSON('bt_entries'),
       meds:    LS.getJSON('bt_meds'),
+      rssFeeds: newsGetStoredFeeds(),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1697,6 +1755,7 @@ function ArgileSettings() {
         app: 'BipolTrack', schemaVersion: BT_SCHEMA_VERSION, exportedAt: new Date().toISOString(),
         entries:       LS.getJSON('bt_entries', []),
         meds:          LS.getJSON('bt_meds',    []),
+        rssFeeds:      newsGetStoredFeeds(),
         patientName:   LS.get('bt_patient_name'),
         patientDob:    LS.get('bt_patient_dob'),
         patientDoctor: LS.get('bt_patient_doctor'),
@@ -1750,6 +1809,7 @@ function ArgileSettings() {
 
       if (file.entries)       LS.setJSON('bt_entries', file.entries);
       if (file.meds)          LS.setJSON('bt_meds',    file.meds);
+      if (Array.isArray(file.rssFeeds)) newsSaveFeeds(file.rssFeeds);
       if (file.patientName)   LS.set('bt_patient_name',   file.patientName);
       if (file.patientDob)    LS.set('bt_patient_dob',    file.patientDob);
       if (file.patientDoctor) LS.set('bt_patient_doctor', file.patientDoctor);
@@ -1831,7 +1891,7 @@ function ArgileSettings() {
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="Sources d'information">
-        <ArgileSettingsRow icon="◍" title="Flux RSS" value="Configurés dans base-rss.md" last />
+        <ArgileRssManager />
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="Cabinet médical">
@@ -1975,6 +2035,88 @@ function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
   );
 }
 
+// Gestionnaire des flux RSS : liste éditable + ajout avec test de validité
+function ArgileRssManager() {
+  const [feeds, setFeeds]   = useStateAx(() => newsGetStoredFeeds() || []);
+  const [seeded, setSeeded] = useStateAx(() => newsGetStoredFeeds() !== null);
+  const [input, setInput]   = useStateAx('');
+  const [adding, setAdding] = useStateAx(false);
+  const [error, setError]   = useStateAx('');
+
+  // Amorce depuis base-rss.md au premier affichage si jamais configuré.
+  useEffectAx(() => {
+    if (seeded) return;
+    let alive = true;
+    newsResolveFeeds().then(f => { if (alive) { setFeeds(f); setSeeded(true); } });
+    return () => { alive = false; };
+  }, []);
+
+  const persist = (next) => { setFeeds(next); newsSaveFeeds(next); };
+
+  const removeFeed = (url) => persist(feeds.filter(f => f.url !== url));
+
+  const addFeed = async () => {
+    const url = input.trim();
+    setError('');
+    if (!newsIsValidFeedUrl(url)) { setError('Adresse invalide (doit commencer par http(s)://)'); return; }
+    if (feeds.some(f => f.url === url)) { setError('Ce flux est déjà dans la liste'); return; }
+    setAdding(true);
+    const res = await newsTestFeed(url);
+    setAdding(false);
+    if (!res.ok) { setError('Flux invalide : ' + res.error); return; }
+    persist([...feeds, { url, title: res.title }]);
+    setInput('');
+  };
+
+  const feedLabel = (f) => {
+    if (f.title) return f.title;
+    try { return new URL(f.url).hostname.replace(/^www\./, ''); }
+    catch { return f.url; }
+  };
+
+  return (
+    <div>
+      {feeds.length === 0 ? (
+        <div style={{ padding: '14px 16px', fontSize: 12, color: ARGILE.muted, fontStyle: 'italic', borderBottom: `1px solid ${ARGILE.border}` }}>
+          Aucun flux configuré. Ajoute-en un ci-dessous.
+        </div>
+      ) : feeds.map((f, i) => (
+        <div key={f.url} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: `1px solid ${ARGILE.border}` }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0 }}>◍</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{feedLabel(f)}</div>
+            <div style={{ fontSize: 11, color: ARGILE.muted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.url}</div>
+          </div>
+          <button onClick={() => removeFeed(f.url)} aria-label="Supprimer le flux" style={{ background: 'none', border: 'none', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 13, color: ARGILE.clay, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            supprimer
+          </button>
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 16px' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0, marginTop: 2 }}>+</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500 }}>Ajouter un flux</div>
+          <div style={{ marginTop: 8 }}>
+            <input
+              value={input}
+              onChange={e => { setInput(e.target.value); if (error) setError(''); }}
+              placeholder="https://exemple.com/feed"
+              onKeyDown={e => { if (e.key === 'Enter' && !adding) addFeed(); }}
+              disabled={adding}
+              style={{ width: '100%', border: `1.5px solid ${error ? ARGILE.clay : ARGILE.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 13, fontFamily: 'DM Sans, sans-serif', background: ARGILE.cream, color: ARGILE.ink, outline: 'none', boxSizing: 'border-box' }}
+            />
+            {error && <div style={{ fontSize: 11, color: ARGILE.clay, marginTop: 6 }}>{error}</div>}
+            <button onClick={addFeed} disabled={adding} style={{ marginTop: 8, width: '100%', padding: '6px 0', background: adding ? ARGILE.sand2 : ARGILE.clay, color: adding ? ARGILE.ink2 : ARGILE.paper, border: 'none', borderRadius: 8, fontSize: 12, cursor: adding ? 'default' : 'pointer', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>
+              {adding ? 'Test du flux…' : 'Tester & ajouter'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // WELCOME — popup d'accueil au premier lancement
 // ══════════════════════════════════════════════════════════════════════
@@ -2010,6 +2152,7 @@ function ArgileWelcome({ onNewSession, onImport }) {
       const file = migrateData(raw);
       if (file.entries)       LS.setJSON('bt_entries',     file.entries);
       if (file.meds)          LS.setJSON('bt_meds',        file.meds);
+      if (Array.isArray(file.rssFeeds)) LS.setJSON('bt_rss_feeds', file.rssFeeds);
       if (file.patientName)   LS.set('bt_patient_name',    file.patientName);
       if (file.patientDob)    LS.set('bt_patient_dob',     file.patientDob);
       if (file.patientDoctor) LS.set('bt_patient_doctor',  file.patientDoctor);

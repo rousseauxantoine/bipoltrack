@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { newsStripHtml, newsLoadRssUrls } from '../lib/core.js';
+import { newsStripHtml, newsLoadRssUrls, newsIsValidFeedUrl } from '../lib/core.js';
 
 // ── newsStripHtml ─────────────────────────────────────────────────────
 
@@ -39,6 +39,44 @@ describe('newsStripHtml', () => {
 
   it('handles tags with attributes', () => {
     expect(newsStripHtml('<a href="http://example.com" class="x">Link</a>')).toBe('Link');
+  });
+});
+
+// ── newsIsValidFeedUrl ────────────────────────────────────────────────
+
+describe('newsIsValidFeedUrl', () => {
+  it('accepts an https URL', () => {
+    expect(newsIsValidFeedUrl('https://example.com/feed')).toBe(true);
+  });
+
+  it('accepts an http URL', () => {
+    expect(newsIsValidFeedUrl('http://example.com/rss')).toBe(true);
+  });
+
+  it('trims surrounding whitespace before validating', () => {
+    expect(newsIsValidFeedUrl('  https://example.com/feed  ')).toBe(true);
+  });
+
+  it('rejects a URL without scheme', () => {
+    expect(newsIsValidFeedUrl('example.com/feed')).toBe(false);
+  });
+
+  it('rejects a non-http scheme', () => {
+    expect(newsIsValidFeedUrl('ftp://example.com/feed')).toBe(false);
+  });
+
+  it('rejects an empty string', () => {
+    expect(newsIsValidFeedUrl('')).toBe(false);
+  });
+
+  it('rejects a URL containing whitespace', () => {
+    expect(newsIsValidFeedUrl('https://example.com/a b')).toBe(false);
+  });
+
+  it('rejects non-string input', () => {
+    expect(newsIsValidFeedUrl(null)).toBe(false);
+    expect(newsIsValidFeedUrl(undefined)).toBe(false);
+    expect(newsIsValidFeedUrl(42)).toBe(false);
   });
 });
 
