@@ -4,6 +4,8 @@
 // ──────────────────────────────────────────────────────────────────────
 const { useState: useStateA, useRef: useRefA, useEffect: useEffectA } = React;
 
+const APP_VERSION = '1.0.1';
+
 const ARGILE = {
   sand:    '#EDDFC4',
   sand2:   '#E2D0AE',
@@ -282,6 +284,20 @@ function ArgileShell({ children, active, onNav, hideHeader = false, hasNoData = 
           {syncLabel}
         </div>
       )}
+      {/* Badge version — journal seulement */}
+      {active === 'journal' && (
+        <div style={{
+          position: 'absolute', top: syncLabel ? 34 : 10, right: 14, zIndex: 20,
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          letterSpacing: '0.08em', color: ARGILE.muted,
+          background: 'rgba(251,246,235,0.80)', backdropFilter: 'blur(6px)',
+          padding: '3px 8px', borderRadius: 20,
+          border: `1px solid ${ARGILE.border}`,
+          pointerEvents: 'none',
+        }}>
+          v{APP_VERSION}
+        </div>
+      )}
       <div style={{ height: '100%', overflowY: 'auto' }}>
         <div style={{ minHeight: '100%', boxSizing: 'border-box', paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)', paddingBottom: 'calc(120px + env(safe-area-inset-bottom, 0px))' }}>
           {children}
@@ -500,20 +516,39 @@ function ArgileJournalSaisie({ onNext }) {
 
 // ───── Journal · étape 2 — Traitements ─────
 function ArgileJournalTraitements({ onSave }) {
-  const lsMeds = LS.getJSON('bt_meds', []).filter(m => m.active !== false);
-  const [checkedMeds, setCheckedMeds] = useStateA(() => lsMeds.map(m => m.id));
+  const [meds, setMeds] = useStateA(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false));
+  const [checkedMeds, setCheckedMeds] = useStateA(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false).map(m => m.id));
   const [showConfirm, setShowConfirm] = useStateA(false);
+  const [showAddMed, setShowAddMed] = useStateA(false);
+  const [medForm, setMedForm] = useStateA({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
+
   const toggleMed = (id) => setCheckedMeds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
 
   const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
 
   const handleSave = () => {
-    if (lsMeds.length > 0 && checkedMeds.length === 0) {
+    if (meds.length > 0 && checkedMeds.length === 0) {
       setShowConfirm(true);
     } else {
       onSave(checkedMeds);
     }
   };
+
+  const saveMed = () => {
+    if (!medForm.name.trim()) return;
+    const newMed = { id: Date.now().toString(), name: medForm.name.trim(), dose: medForm.dose.trim(), qty: medForm.qty.trim(), freq: medForm.freq, notes: medForm.notes.trim(), start: medForm.start, active: true };
+    const all = [...LS.getJSON('bt_meds', []), newMed];
+    LS.set('bt_meds', JSON.stringify(all));
+    if (typeof driveAutoSync === 'function') driveAutoSync();
+    const activeMeds = all.filter(m => m.active !== false);
+    setMeds(activeMeds);
+    setCheckedMeds(s => [...s, newMed.id]);
+    setShowAddMed(false);
+    setMedForm({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
+  };
+
+  const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, fontSize: 15, fontFamily: 'inherit', color: ARGILE.ink, boxSizing: 'border-box', outline: 'none' };
+  const labelStyle = { display: 'block', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.1em', textTransform: 'uppercase', color: ARGILE.muted, marginBottom: 6 };
 
   return (
     <>
@@ -534,14 +569,9 @@ function ArgileJournalTraitements({ onSave }) {
           Ce que tu as <span style={{ fontStyle: 'italic' }}>pris</span>.
         </h2>
 
-        {lsMeds.length === 0 ? (
-          <p style={{ fontSize: 14, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif', lineHeight: 1.6 }}>
-            Aucun traitement configuré.<br/>
-            Rends-toi dans <em>Soins</em> pour en ajouter.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-            {lsMeds.map(m => {
+        {meds.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+            {meds.map(m => {
               const sel    = checkedMeds.includes(m.id);
               const detail = [m.dose, m.freq].filter(Boolean).join(' · ');
               return (
@@ -567,6 +597,15 @@ function ArgileJournalTraitements({ onSave }) {
             })}
           </div>
         )}
+
+        <button onClick={() => setShowAddMed(true)} style={{
+          marginBottom: 32, width: '100%', padding: '14px 18px', borderRadius: 14,
+          border: `1.5px dashed ${ARGILE.muted}`, background: 'transparent',
+          color: ARGILE.ink2, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 16, cursor: 'pointer',
+        }}>
+          + ajouter un traitement
+        </button>
 
         <button onClick={handleSave} style={{
           width: '100%', padding: '18px 20px', border: 'none', borderRadius: 100,
@@ -613,6 +652,52 @@ function ArgileJournalTraitements({ onSave }) {
               fontSize: 15, cursor: 'pointer', display: 'block',
             }}>
               Revenir aux traitements
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showAddMed && (
+        <div onClick={() => setShowAddMed(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(43,24,16,0.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0', padding: '24px 20px 36px', boxSizing: 'border-box', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>Nouveau remède</p>
+            <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 26, color: ARGILE.ink, fontWeight: 400, margin: '0 0 20px' }}>Ajouter un traitement</h2>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Nom du médicament *</label>
+              <input style={inputStyle} placeholder="ex : Lithium, Dépakine…" value={medForm.name} onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Dosage</label>
+                <input style={inputStyle} placeholder="500 mg" value={medForm.dose} onChange={e => setMedForm(f => ({ ...f, dose: e.target.value }))} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Quantité</label>
+                <input style={inputStyle} placeholder="2 cp" value={medForm.qty} onChange={e => setMedForm(f => ({ ...f, qty: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Fréquence</label>
+              <select style={inputStyle} value={medForm.freq} onChange={e => setMedForm(f => ({ ...f, freq: e.target.value }))}>
+                {['1x/jour','2x/jour','3x/jour','au coucher','matin','matin+soir'].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Date de début</label>
+              <input type="date" style={inputStyle} value={medForm.start} onChange={e => setMedForm(f => ({ ...f, start: e.target.value }))} />
+            </div>
+            <div style={{ marginBottom: 22 }}>
+              <label style={labelStyle}>Notes (optionnel)</label>
+              <textarea style={{ ...inputStyle, height: 64, resize: 'none' }} placeholder="ex : à prendre avec de la nourriture…" value={medForm.notes} onChange={e => setMedForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+
+            <button onClick={saveMed} style={{ width: '100%', padding: '16px', border: 'none', borderRadius: 14, background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18, cursor: 'pointer', marginBottom: 10 }}>
+              Enregistrer
+            </button>
+            <button onClick={() => setShowAddMed(false)} style={{ width: '100%', padding: '12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 14, background: 'transparent', color: ARGILE.ink2, fontSize: 15, cursor: 'pointer' }}>
+              Annuler
             </button>
           </div>
         </div>

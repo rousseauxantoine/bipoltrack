@@ -158,45 +158,116 @@ async function driveAutoSync() {
 // ══════════════════════════════════════════════════════════════════════
 // GOOGLE OAUTH — helper partagé (Welcome + Settings)
 // ══════════════════════════════════════════════════════════════════════
-function googleOAuthToken(clientId) {
+
+// Génère un code verifier PKCE aléatoire de façon synchrone (pas d'await → window.open reste dans le geste utilisateur)
+function _pkceVerifier() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function googleOAuthToken(clientId, clientSecret) {
   return new Promise((resolve, reject) => {
     const cached = sessionStorage.getItem('bt_google_token');
     const expiry  = sessionStorage.getItem('bt_google_token_expiry');
     if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
     if (!clientId) { reject(new Error('Client ID manquant')); return; }
 
-    const redirectUri = window.location.href.replace(/[^/]*(\?.*)?$/, 'oauth.html');
+    // PKCE plain: synchrone, aucun await avant window.open() → iOS Safari ne bloque pas la popup.
+    // Authorization Code flow (response_type=code) contourne la vérification "JavaScript Origins"
+    // que Google effectue uniquement pour le flow implicite (response_type=token) — c'est ce qui
+    // causait l'erreur 401:invalid_client dans Safari iOS.
+    const verifier = _pkceVerifier();
+
+    const cleanHref   = window.location.href.split('#')[0].split('?')[0];
+    const redirectUri = cleanHref.substring(0, cleanHref.lastIndexOf('/') + 1) + 'oauth.html';
     const scope       = 'https://www.googleapis.com/auth/drive.file';
     const authUrl     = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id='     + encodeURIComponent(clientId)
-      + '&redirect_uri='  + encodeURIComponent(redirectUri)
-      + '&response_type=token'
-      + '&scope='         + encodeURIComponent(scope);
+      + '?client_id='             + encodeURIComponent(clientId)
+      + '&redirect_uri='          + encodeURIComponent(redirectUri)
+      + '&response_type=code'
+      + '&scope='                 + encodeURIComponent(scope)
+      + '&code_challenge='        + encodeURIComponent(verifier)
+      + '&code_challenge_method=plain';
+
+    try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
 
     const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
     if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
 
-    const onMsg = (event) => {
-      if (event.origin !== window.location.origin) return;
-      const d = event.data;
-      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
-      window.removeEventListener('message', onMsg);
+    let settled = false;
+    let watchClose;
+
+    const settle = (d) => {
+      if (settled) return;
+      settled = true;
       clearInterval(watchClose);
+      window.removeEventListener('message', onMsg);
+      window.removeEventListener('storage', onStorage);
+      try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
+
+      if (d.type === 'bt-oauth-error') { reject(new Error(d.error || 'auth échouée')); return; }
+
+      // Échange du code d'autorisation contre un access token (token endpoint Google)
+      if (d.type === 'bt-oauth-code') {
+        fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(Object.assign({
+            code:          d.code,
+            client_id:     clientId,
+            redirect_uri:  redirectUri,
+            code_verifier: verifier,
+            grant_type:    'authorization_code',
+          }, clientSecret ? { client_secret: clientSecret } : {})),
+        })
+          .then(r => r.json().then(j => ({ ok: r.ok, j })))
+          .then(({ ok, j }) => {
+            if (!ok) throw new Error(j.error_description || j.error || 'token erreur');
+            const exp = +(j.expires_in || 3600);
+            sessionStorage.setItem('bt_google_token', j.access_token);
+            sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
+            resolve(j.access_token);
+          })
+          .catch(reject);
+        return;
+      }
+
+      // Rétrocompatibilité : flow implicite (ne devrait plus arriver)
       if (d.type === 'bt-oauth-token') {
         const exp = +(d.expiresIn || 3600);
         sessionStorage.setItem('bt_google_token', d.token);
         sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
         resolve(d.token);
-      } else {
-        reject(new Error(d.error || 'auth échouée'));
       }
     };
-    window.addEventListener('message', onMsg);
 
-    const watchClose = setInterval(() => {
-      if (popup.closed) {
+    const onMsg = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const d = event.data;
+      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
+      settle(d);
+    };
+
+    // Fallback Safari : window.opener peut être null après navigation cross-origin dans la popup (ITP)
+    const onStorage = (event) => {
+      if (event.key !== 'bt_oauth_relay' || !event.newValue) return;
+      try {
+        const d = JSON.parse(event.newValue);
+        if (d && d.type && d.type.startsWith('bt-oauth')) settle(d);
+      } catch (_) {}
+    };
+
+    window.addEventListener('message', onMsg);
+    window.addEventListener('storage', onStorage);
+
+    watchClose = setInterval(() => {
+      if (popup.closed && !settled) {
+        settled = true;
         clearInterval(watchClose);
         window.removeEventListener('message', onMsg);
+        window.removeEventListener('storage', onStorage);
+        try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
         reject(new Error('Fenêtre fermée sans authentification'));
       }
     }, 600);
@@ -1744,6 +1815,7 @@ function ArgileSettings() {
   const [patientDob,    setPatientDob]    = useStateAx(LS.get('bt_patient_dob'));
   const [patientDoctor, setPatientDoctor] = useStateAx(LS.get('bt_patient_doctor'));
   const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
+  const [driveSecret,   setDriveSecret]   = useStateAx(LS.get('bt_drive_client_secret'));
   const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
   const [phaseAlgo,     setPhaseAlgo]     = useStateAx(LS.get('bt_phase_algo') || '21j');
   const [exportFeedback,  setExportFeedback]  = useStateAx('');
@@ -1760,11 +1832,16 @@ function ArgileSettings() {
   };
 
   const saveDriveId = (v) => {
-    saveField('bt_drive_client_id', v, setDriveId);
+    const cleaned = v.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    saveField('bt_drive_client_id', cleaned, setDriveId);
     LS.set('bt_last_synced', String(Date.now()));
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
     setSyncMessage('Synchronisation configurée ✓');
     setTimeout(() => setSyncMessage(''), 3000);
+  };
+
+  const saveDriveSecret = (v) => {
+    saveField('bt_drive_client_secret', v.trim(), setDriveSecret);
   };
 
   const toggleSync = () => {
@@ -1808,7 +1885,7 @@ function ArgileSettings() {
   };
 
   // ── Google Drive — OAuth token via helper partagé ─────────────────
-  const getGoogleToken = () => googleOAuthToken(driveId);
+  const getGoogleToken = () => googleOAuthToken(driveId, driveSecret);
 
   // ── Sauvegarder vers Drive ─────────────────────────────────────────
   const saveNow = async () => {
@@ -1917,9 +1994,33 @@ function ArgileSettings() {
       )}
 
       <ArgileSettingsGroup label="Sauvegardes">
-        <ArgileEditRow icon="↥" title="Google Drive" value={driveStatus}
+        <ArgileEditRow icon="↥" title="Google Drive · Client ID"
+          value={driveId ? driveId.slice(0, 10) + '…' : undefined}
           placeholder="Client ID Google OAuth"
           onSave={saveDriveId} />
+        <ArgileEditRow icon="🔑" title="Google Drive · Client Secret"
+          value={driveSecret ? '••••••••' : undefined}
+          placeholder="Client Secret Google OAuth"
+          onSave={saveDriveSecret} inputType="password" />
+        {driveId && (() => {
+          const clean = window.location.href.split('#')[0].split('?')[0];
+          const redirectUri = clean.substring(0, clean.lastIndexOf('/') + 1) + 'oauth.html';
+          const validFormat = driveId.trim().endsWith('.apps.googleusercontent.com');
+          const id = driveId.trim();
+          const idPreview = id.length > 30 ? id.slice(0, 16) + '…' + id.slice(-14) : id;
+          return (
+            <div style={{ padding: '10px 16px 12px', borderBottom: `1px solid ${ARGILE.border}`, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, lineHeight: 1.7 }}>
+              {!validFormat && (
+                <div style={{ color: '#c0392b', marginBottom: 6 }}>
+                  ⚠ Le Client ID doit se terminer par .apps.googleusercontent.com
+                </div>
+              )}
+              <div><span style={{ opacity: 0.6 }}>Client ID :</span> <span style={{ color: ARGILE.ink2 }}>{idPreview}</span></div>
+              <div style={{ marginTop: 2 }}><span style={{ opacity: 0.6 }}>Client Secret :</span> <span style={{ color: driveSecret ? ARGILE.ink2 : '#c0392b' }}>{driveSecret ? '••••••••' : '⚠ manquant — requis pour l\'échange de token'}</span></div>
+              <div style={{ marginTop: 4 }}><span style={{ opacity: 0.6 }}>URI de redirection :</span> <span style={{ color: ARGILE.ink2, wordBreak: 'break-all' }}>{redirectUri}</span></div>
+            </div>
+          );
+        })()}
         {driveId && (
           <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
             value={backupFeedback || 'Envoie les données vers Drive'}
@@ -1971,7 +2072,7 @@ function ArgileSettings() {
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="À propos">
-        <ArgileSettingsRow icon="❀" title="Version" value="1.0.0" />
+        <ArgileSettingsRow icon="❀" title="Version" value={APP_VERSION} />
         <ArgileSettingsRow icon="?" title="Dépôt GitHub" trailing="ouvrir →"
           onTrailing={() => window.open('https://github.com/rousseauxantoine/bipoltrack', '_blank')} last />
       </ArgileSettingsGroup>
@@ -2053,16 +2154,16 @@ function ArgileSettingsRow({ icon, title, value, valueColor, trailing, toggle, t
 }
 
 // Ligne avec champ éditable inline (modifier / enregistrer / annuler)
-function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
+function ArgileEditRow({ icon, title, value, placeholder, onSave, last, inputType }) {
   const [editing, setEditing] = useStateAx(false);
-  const [input,   setInput]   = useStateAx(value || '');
+  const [input,   setInput]   = useStateAx('');
 
-  // Sync si la valeur parente change (ex: chargement initial)
+  // Sync si la valeur parente change (ex: chargement initial) — ne pas pré-remplir les champs password
   const { useEffect: useEffectAx2 } = React;
-  useEffectAx2(() => { if (!editing) setInput(value || ''); }, [value]);
+  useEffectAx2(() => { if (!editing && inputType !== 'password') setInput(value || ''); }, [value]);
 
-  const handleSave = () => { onSave(input.trim()); setEditing(false); };
-  const handleCancel = () => { setInput(value || ''); setEditing(false); };
+  const handleSave = () => { onSave(input.trim()); setEditing(false); setInput(''); };
+  const handleCancel = () => { setInput(''); setEditing(false); };
 
   return (
     <div style={{ display: 'flex', alignItems: editing ? 'flex-start' : 'center', gap: 14, padding: '14px 16px', borderBottom: last ? 'none' : `1px solid ${ARGILE.border}` }}>
@@ -2073,6 +2174,7 @@ function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
           <div style={{ marginTop: 8 }}>
             <input
               autoFocus
+              type={inputType || 'text'}
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder={placeholder}
@@ -2299,6 +2401,10 @@ function ArgileWelcome({ onNewSession, onImport }) {
             Tes données restent sur cet appareil.
           </p>
         </div>
+
+        <p style={{ fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', marginTop: 'auto', paddingTop: 20, opacity: 0.6 }}>
+          v{APP_VERSION}
+        </p>
       </div>
     );
   }
