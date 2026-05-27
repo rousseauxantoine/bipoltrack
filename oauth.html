@@ -18,12 +18,15 @@
     var params = new URLSearchParams(hash || search);
 
     var token     = params.get('access_token');
+    var code      = params.get('code');
     var expiresIn = params.get('expires_in');
     var error     = params.get('error');
 
-    var msg = token
-      ? { type: 'bt-oauth-token', token: token, expiresIn: expiresIn || '3600' }
-      : { type: 'bt-oauth-error', error: error || 'unknown' };
+    var msg = code
+      ? { type: 'bt-oauth-code',  code: code }
+      : token
+        ? { type: 'bt-oauth-token', token: token, expiresIn: expiresIn || '3600' }
+        : { type: 'bt-oauth-error', error: error || 'unknown' };
 
     // Primary channel: postMessage (Chrome, Firefox, most browsers)
     if (window.opener) {

@@ -158,6 +158,14 @@ async function driveAutoSync() {
 // ══════════════════════════════════════════════════════════════════════
 // GOOGLE OAUTH — helper partagé (Welcome + Settings)
 // ══════════════════════════════════════════════════════════════════════
+
+// Génère un code verifier PKCE aléatoire de façon synchrone (pas d'await → window.open reste dans le geste utilisateur)
+function _pkceVerifier() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 function googleOAuthToken(clientId) {
   return new Promise((resolve, reject) => {
     const cached = sessionStorage.getItem('bt_google_token');
@@ -165,23 +173,31 @@ function googleOAuthToken(clientId) {
     if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
     if (!clientId) { reject(new Error('Client ID manquant')); return; }
 
-    // Strip hash/query before computing directory, to handle Safari PWA and hash-router URLs
+    // PKCE plain: synchrone, aucun await avant window.open() → iOS Safari ne bloque pas la popup.
+    // Authorization Code flow (response_type=code) contourne la vérification "JavaScript Origins"
+    // que Google effectue uniquement pour le flow implicite (response_type=token) — c'est ce qui
+    // causait l'erreur 401:invalid_client dans Safari iOS.
+    const verifier = _pkceVerifier();
+
     const cleanHref   = window.location.href.split('#')[0].split('?')[0];
     const redirectUri = cleanHref.substring(0, cleanHref.lastIndexOf('/') + 1) + 'oauth.html';
     const scope       = 'https://www.googleapis.com/auth/drive.file';
     const authUrl     = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id='    + encodeURIComponent(clientId)
-      + '&redirect_uri=' + encodeURIComponent(redirectUri)
-      + '&response_type=token'
-      + '&scope='        + encodeURIComponent(scope);
+      + '?client_id='             + encodeURIComponent(clientId)
+      + '&redirect_uri='          + encodeURIComponent(redirectUri)
+      + '&response_type=code'
+      + '&scope='                 + encodeURIComponent(scope)
+      + '&code_challenge='        + encodeURIComponent(verifier)
+      + '&code_challenge_method=plain';
 
-    // Clear any stale relay before opening the popup
     try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
 
     const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
     if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
 
     let settled = false;
+    let watchClose;
+
     const settle = (d) => {
       if (settled) return;
       settled = true;
@@ -189,13 +205,40 @@ function googleOAuthToken(clientId) {
       window.removeEventListener('message', onMsg);
       window.removeEventListener('storage', onStorage);
       try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
+
+      if (d.type === 'bt-oauth-error') { reject(new Error(d.error || 'auth échouée')); return; }
+
+      // Échange du code d'autorisation contre un access token (token endpoint Google)
+      if (d.type === 'bt-oauth-code') {
+        fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code:          d.code,
+            client_id:     clientId,
+            redirect_uri:  redirectUri,
+            code_verifier: verifier,
+            grant_type:    'authorization_code',
+          }),
+        })
+          .then(r => r.json().then(j => ({ ok: r.ok, j })))
+          .then(({ ok, j }) => {
+            if (!ok) throw new Error(j.error || j.error_description || 'token erreur');
+            const exp = +(j.expires_in || 3600);
+            sessionStorage.setItem('bt_google_token', j.access_token);
+            sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
+            resolve(j.access_token);
+          })
+          .catch(reject);
+        return;
+      }
+
+      // Rétrocompatibilité : flow implicite (ne devrait plus arriver)
       if (d.type === 'bt-oauth-token') {
         const exp = +(d.expiresIn || 3600);
         sessionStorage.setItem('bt_google_token', d.token);
         sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
         resolve(d.token);
-      } else {
-        reject(new Error(d.error || 'auth échouée'));
       }
     };
 
@@ -206,7 +249,7 @@ function googleOAuthToken(clientId) {
       settle(d);
     };
 
-    // Safari fallback: window.opener may be null after cross-origin popup navigation (ITP)
+    // Fallback Safari : window.opener peut être null après navigation cross-origin dans la popup (ITP)
     const onStorage = (event) => {
       if (event.key !== 'bt_oauth_relay' || !event.newValue) return;
       try {
@@ -218,16 +261,14 @@ function googleOAuthToken(clientId) {
     window.addEventListener('message', onMsg);
     window.addEventListener('storage', onStorage);
 
-    const watchClose = setInterval(() => {
-      if (popup.closed) {
-        if (!settled) {
-          settled = true;
-          clearInterval(watchClose);
-          window.removeEventListener('message', onMsg);
-          window.removeEventListener('storage', onStorage);
-          try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
-          reject(new Error('Fenêtre fermée sans authentification'));
-        }
+    watchClose = setInterval(() => {
+      if (popup.closed && !settled) {
+        settled = true;
+        clearInterval(watchClose);
+        window.removeEventListener('message', onMsg);
+        window.removeEventListener('storage', onStorage);
+        try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
+        reject(new Error('Fenêtre fermée sans authentification'));
       }
     }, 600);
   });
