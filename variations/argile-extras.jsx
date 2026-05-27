@@ -1927,6 +1927,23 @@ function ArgileSettings() {
         <ArgileEditRow icon="↥" title="Google Drive" value={driveStatus}
           placeholder="Client ID Google OAuth"
           onSave={saveDriveId} />
+        {driveId && (() => {
+          const clean = window.location.href.split('#')[0].split('?')[0];
+          const redirectUri = clean.substring(0, clean.lastIndexOf('/') + 1) + 'oauth.html';
+          const validFormat = driveId.trim().endsWith('.apps.googleusercontent.com');
+          return (
+            <div style={{ padding: '10px 16px 12px', borderBottom: `1px solid ${ARGILE.border}`, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, lineHeight: 1.7 }}>
+              {!validFormat && (
+                <div style={{ color: '#c0392b', marginBottom: 4 }}>
+                  ⚠ Le Client ID doit se terminer par <em>.apps.googleusercontent.com</em>
+                </div>
+              )}
+              <div><span style={{ opacity: 0.6 }}>URI de redirection :</span></div>
+              <div style={{ wordBreak: 'break-all', color: ARGILE.ink2 }}>{redirectUri}</div>
+              <div style={{ marginTop: 4, opacity: 0.7 }}>↑ Vérifie que cette URI exacte est dans Google Console → Identifiants → URI de redirection autorisés</div>
+            </div>
+          );
+        })()}
         {driveId && (
           <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
             value={backupFeedback || 'Envoie les données vers Drive'}
