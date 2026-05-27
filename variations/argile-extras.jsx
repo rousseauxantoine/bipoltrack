@@ -1937,7 +1937,7 @@ function ArgileSettings() {
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="À propos">
-        <ArgileSettingsRow icon="❀" title="Version" value="1.0.0" />
+        <ArgileSettingsRow icon="❀" title="Version" value={APP_VERSION} />
         <ArgileSettingsRow icon="?" title="Dépôt GitHub" trailing="ouvrir →"
           onTrailing={() => window.open('https://github.com/rousseauxantoine/bipoltrack', '_blank')} last />
       </ArgileSettingsGroup>
@@ -2265,6 +2265,10 @@ function ArgileWelcome({ onNewSession, onImport }) {
             Tes données restent sur cet appareil.
           </p>
         </div>
+
+        <p style={{ fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', marginTop: 'auto', paddingTop: 20, opacity: 0.6 }}>
+          v{APP_VERSION}
+        </p>
       </div>
     );
   }

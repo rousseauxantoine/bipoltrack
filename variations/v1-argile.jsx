@@ -4,6 +4,8 @@
 // ──────────────────────────────────────────────────────────────────────
 const { useState: useStateA, useRef: useRefA, useEffect: useEffectA } = React;
 
+const APP_VERSION = '1.0.1';
+
 const ARGILE = {
   sand:    '#EDDFC4',
   sand2:   '#E2D0AE',
@@ -280,6 +282,20 @@ function ArgileShell({ children, active, onNav, hideHeader = false, hasNoData = 
           pointerEvents: 'none',
         }}>
           {syncLabel}
+        </div>
+      )}
+      {/* Badge version — journal seulement */}
+      {active === 'journal' && (
+        <div style={{
+          position: 'absolute', top: syncLabel ? 34 : 10, right: 14, zIndex: 20,
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          letterSpacing: '0.08em', color: ARGILE.muted,
+          background: 'rgba(251,246,235,0.80)', backdropFilter: 'blur(6px)',
+          padding: '3px 8px', borderRadius: 20,
+          border: `1px solid ${ARGILE.border}`,
+          pointerEvents: 'none',
+        }}>
+          v{APP_VERSION}
         </div>
       )}
       <div style={{ height: '100%', overflowY: 'auto' }}>
