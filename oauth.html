@@ -21,17 +21,24 @@
     var expiresIn = params.get('expires_in');
     var error     = params.get('error');
 
+    var msg = token
+      ? { type: 'bt-oauth-token', token: token, expiresIn: expiresIn || '3600' }
+      : { type: 'bt-oauth-error', error: error || 'unknown' };
+
+    // Primary channel: postMessage (Chrome, Firefox, most browsers)
     if (window.opener) {
-      window.opener.postMessage(
-        token
-          ? { type: 'bt-oauth-token', token: token, expiresIn: expiresIn || '3600' }
-          : { type: 'bt-oauth-error', error: error || 'unknown' },
-        window.location.origin
-      );
-      window.close();
-    } else {
-      document.querySelector('p').textContent = 'Ferme cette fenêtre manuellement.';
+      try { window.opener.postMessage(msg, window.location.origin); } catch (e) {}
     }
+
+    // Fallback channel: localStorage relay (Safari nulls window.opener after cross-origin popup navigation)
+    try { localStorage.setItem('bt_oauth_relay', JSON.stringify(msg)); } catch (e) {}
+
+    window.close();
+
+    // In case close is blocked, show a fallback message
+    setTimeout(function () {
+      document.querySelector('p').textContent = 'Tu peux fermer cette fenêtre.';
+    }, 300);
   })();
 </script>
 </body>
