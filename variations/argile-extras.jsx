@@ -2235,6 +2235,10 @@ function ArgileWelcome({ onNewSession, onImport }) {
             Tes données restent sur cet appareil.
           </p>
         </div>
+
+        <p style={{ fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.12em', marginTop: 'auto', paddingTop: 20, opacity: 0.6 }}>
+          v{APP_VERSION}
+        </p>
       </div>
     );
   }
