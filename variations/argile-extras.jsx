@@ -934,9 +934,12 @@ function ArgileStatsDeep() {
 const MED_COLORS = [ARGILE.clay, ARGILE.olive, '#7A6F2F', '#5C6A9E', '#8B5C5C'];
 
 function ArgileMeds() {
+  const emptyForm = () => ({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
   const [meds, setMeds] = useStateAx(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false));
   const [showModal, setShowModal] = useStateAx(false);
-  const [form, setForm] = useStateAx({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
+  const [editingId, setEditingId] = useStateAx(null);
+  const [confirmDelete, setConfirmDelete] = useStateAx(null);
+  const [form, setForm] = useStateAx(emptyForm);
 
   const formatStart = (s) => {
     if (!s) return '';
@@ -945,15 +948,51 @@ function ArgileMeds() {
     return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
   };
 
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm());
+    setShowModal(true);
+  };
+
+  const openEdit = (m) => {
+    setEditingId(m.id);
+    setForm({ name: m.name || '', dose: m.dose || '', qty: m.qty || '', freq: m.freq || '1x/jour', notes: m.notes || '', start: m.start || new Date().toISOString().slice(0, 10) });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setForm(emptyForm());
+  };
+
   const saveMed = () => {
     if (!form.name.trim()) return;
-    const newMed = { id: Date.now().toString(), name: form.name.trim(), dose: form.dose.trim(), qty: form.qty.trim(), freq: form.freq, notes: form.notes.trim(), start: form.start, active: true };
-    const all = [...LS.getJSON('bt_meds', []), newMed];
-    LS.set('bt_meds', JSON.stringify(all));
+    const fields = { name: form.name.trim(), dose: form.dose.trim(), qty: form.qty.trim(), freq: form.freq, notes: form.notes.trim(), start: form.start };
+    const all = LS.getJSON('bt_meds', []);
+    let next;
+    if (editingId) {
+      // Édition en place : on conserve l'id (référencé par les entrées du
+      // carnet) et le flag active. Le carnet n'est jamais réécrit.
+      next = all.map(m => m.id === editingId ? { ...m, ...fields } : m);
+    } else {
+      next = [...all, { id: Date.now().toString(), ...fields, active: true }];
+    }
+    LS.set('bt_meds', JSON.stringify(next));
     driveAutoSync();
-    setMeds(all.filter(m => m.active !== false));
-    setShowModal(false);
-    setForm({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
+    setMeds(next.filter(m => m.active !== false));
+    closeModal();
+  };
+
+  const deleteMed = (m) => {
+    // Soft-delete : on garde le médicament dans bt_meds (active:false) pour que
+    // les entrées passées qui le référencent par id restent intactes dans le
+    // carnet. Il disparaît juste de la liste active et des prochaines saisies.
+    const next = LS.getJSON('bt_meds', []).map(x => x.id === m.id ? { ...x, active: false } : x);
+    LS.set('bt_meds', JSON.stringify(next));
+    driveAutoSync();
+    setMeds(next.filter(x => x.active !== false));
+    setConfirmDelete(null);
   };
 
   const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${ARGILE.border}`, background: ARGILE.paper, fontSize: 15, fontFamily: 'inherit', color: ARGILE.ink, boxSizing: 'border-box', outline: 'none' };
@@ -962,11 +1001,11 @@ function ArgileMeds() {
   return (
     <div style={{ padding: '20px 24px 0' }}>
       {showModal && (
-        <div onClick={() => setShowModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(43,24,16,0.45)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+        <div onClick={closeModal} style={{ position: 'fixed', inset: 0, background: 'rgba(43,24,16,0.45)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0', padding: '24px 20px 36px', boxSizing: 'border-box' }}>
             <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
-            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>Nouveau remède</p>
-            <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 26, color: ARGILE.ink, fontWeight: 400, margin: '0 0 20px' }}>Ajouter un traitement</h2>
+            <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>{editingId ? 'Modifier' : 'Nouveau remède'}</p>
+            <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 26, color: ARGILE.ink, fontWeight: 400, margin: '0 0 20px' }}>{editingId ? 'Modifier le traitement' : 'Ajouter un traitement'}</h2>
 
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>Nom du médicament *</label>
@@ -998,9 +1037,26 @@ function ArgileMeds() {
             </div>
 
             <button onClick={saveMed} style={{ width: '100%', padding: '16px', border: 'none', borderRadius: 14, background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 18, cursor: 'pointer', marginBottom: 10 }}>
-              Enregistrer
+              {editingId ? 'Mettre à jour' : 'Enregistrer'}
             </button>
-            <button onClick={() => setShowModal(false)} style={{ width: '100%', padding: '12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 14, background: 'transparent', color: ARGILE.ink2, fontSize: 15, cursor: 'pointer' }}>
+            <button onClick={closeModal} style={{ width: '100%', padding: '12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 14, background: 'transparent', color: ARGILE.ink2, fontSize: 15, cursor: 'pointer' }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div onClick={() => setConfirmDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(43,24,16,0.45)', zIndex: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 340, background: ARGILE.sand, borderRadius: 20, padding: '28px 24px', boxSizing: 'border-box' }}>
+            <h2 style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 24, color: ARGILE.ink, fontWeight: 400, margin: '0 0 10px' }}>Supprimer ce traitement ?</h2>
+            <p style={{ fontSize: 14, color: ARGILE.ink2, lineHeight: 1.5, margin: '0 0 22px' }}>
+              « {confirmDelete.name} » n'apparaîtra plus dans tes soins ni dans les prochaines saisies. Tes journées déjà enregistrées dans le carnet ne changent pas.
+            </p>
+            <button onClick={() => deleteMed(confirmDelete)} style={{ width: '100%', padding: '15px', border: 'none', borderRadius: 14, background: '#8B5C5C', color: ARGILE.paper, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 17, cursor: 'pointer', marginBottom: 10 }}>
+              Supprimer
+            </button>
+            <button onClick={() => setConfirmDelete(null)} style={{ width: '100%', padding: '12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 14, background: 'transparent', color: ARGILE.ink2, fontSize: 15, cursor: 'pointer' }}>
               Annuler
             </button>
           </div>
@@ -1019,7 +1075,7 @@ function ArgileMeds() {
         {meds.length === 0 ? 'Aucun traitement enregistré.' : `${meds.length} traitement${meds.length > 1 ? 's' : ''} en cours.`}
       </p>
 
-      <button onClick={() => setShowModal(true)} style={{
+      <button onClick={openAdd} style={{
         marginBottom: 16, width: '100%', padding: '14px 18px', borderRadius: 14,
         border: `1.5px dashed ${ARGILE.muted}`, background: 'transparent',
         color: ARGILE.ink2, fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
@@ -1083,6 +1139,14 @@ function ArgileMeds() {
                     « {m.notes} »
                   </p>
                 )}
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${ARGILE.border}`, display: 'flex', gap: 10 }}>
+                  <button onClick={() => openEdit(m)} style={{ flex: 1, padding: '9px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 10, background: 'transparent', color: ARGILE.ink2, fontSize: 13, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em', cursor: 'pointer' }}>
+                    Modifier
+                  </button>
+                  <button onClick={() => setConfirmDelete(m)} style={{ flex: 1, padding: '9px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 10, background: 'transparent', color: '#8B5C5C', fontSize: 13, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em', cursor: 'pointer' }}>
+                    Supprimer
+                  </button>
+                </div>
               </div>
             );
           })}
