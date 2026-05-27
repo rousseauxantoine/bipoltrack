@@ -1767,7 +1767,8 @@ function ArgileSettings() {
   };
 
   const saveDriveId = (v) => {
-    saveField('bt_drive_client_id', v, setDriveId);
+    const cleaned = v.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    saveField('bt_drive_client_id', cleaned, setDriveId);
     LS.set('bt_last_synced', String(Date.now()));
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
     setSyncMessage('Synchronisation configurée ✓');
