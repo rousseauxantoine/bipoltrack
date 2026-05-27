@@ -166,7 +166,7 @@ function _pkceVerifier() {
   return btoa(String.fromCharCode(...arr)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function googleOAuthToken(clientId) {
+function googleOAuthToken(clientId, clientSecret) {
   return new Promise((resolve, reject) => {
     const cached = sessionStorage.getItem('bt_google_token');
     const expiry  = sessionStorage.getItem('bt_google_token_expiry');
@@ -213,17 +213,17 @@ function googleOAuthToken(clientId) {
         fetch('https://oauth2.googleapis.com/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
+          body: new URLSearchParams(Object.assign({
             code:          d.code,
             client_id:     clientId,
             redirect_uri:  redirectUri,
             code_verifier: verifier,
             grant_type:    'authorization_code',
-          }),
+          }, clientSecret ? { client_secret: clientSecret } : {})),
         })
           .then(r => r.json().then(j => ({ ok: r.ok, j })))
           .then(({ ok, j }) => {
-            if (!ok) throw new Error(j.error || j.error_description || 'token erreur');
+            if (!ok) throw new Error(j.error_description || j.error || 'token erreur');
             const exp = +(j.expires_in || 3600);
             sessionStorage.setItem('bt_google_token', j.access_token);
             sessionStorage.setItem('bt_google_token_expiry', String(Date.now() + (exp - 60) * 1000));
@@ -1751,6 +1751,7 @@ function ArgileSettings() {
   const [patientDob,    setPatientDob]    = useStateAx(LS.get('bt_patient_dob'));
   const [patientDoctor, setPatientDoctor] = useStateAx(LS.get('bt_patient_doctor'));
   const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
+  const [driveSecret,   setDriveSecret]   = useStateAx(LS.get('bt_drive_client_secret'));
   const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
   const [phaseAlgo,     setPhaseAlgo]     = useStateAx(LS.get('bt_phase_algo') || '21j');
   const [exportFeedback,  setExportFeedback]  = useStateAx('');
@@ -1773,6 +1774,10 @@ function ArgileSettings() {
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
     setSyncMessage('Synchronisation configurée ✓');
     setTimeout(() => setSyncMessage(''), 3000);
+  };
+
+  const saveDriveSecret = (v) => {
+    saveField('bt_drive_client_secret', v.trim(), setDriveSecret);
   };
 
   const toggleSync = () => {
@@ -1816,7 +1821,7 @@ function ArgileSettings() {
   };
 
   // ── Google Drive — OAuth token via helper partagé ─────────────────
-  const getGoogleToken = () => googleOAuthToken(driveId);
+  const getGoogleToken = () => googleOAuthToken(driveId, driveSecret);
 
   // ── Sauvegarder vers Drive ─────────────────────────────────────────
   const saveNow = async () => {
@@ -1925,9 +1930,14 @@ function ArgileSettings() {
       )}
 
       <ArgileSettingsGroup label="Sauvegardes">
-        <ArgileEditRow icon="↥" title="Google Drive" value={driveStatus}
+        <ArgileEditRow icon="↥" title="Google Drive · Client ID"
+          value={driveId ? driveId.slice(0, 10) + '…' : undefined}
           placeholder="Client ID Google OAuth"
           onSave={saveDriveId} />
+        <ArgileEditRow icon="🔑" title="Google Drive · Client Secret"
+          value={driveSecret ? '••••••••' : undefined}
+          placeholder="Client Secret Google OAuth"
+          onSave={saveDriveSecret} inputType="password" />
         {driveId && (() => {
           const clean = window.location.href.split('#')[0].split('?')[0];
           const redirectUri = clean.substring(0, clean.lastIndexOf('/') + 1) + 'oauth.html';
@@ -1941,11 +1951,9 @@ function ArgileSettings() {
                   ⚠ Le Client ID doit se terminer par .apps.googleusercontent.com
                 </div>
               )}
-              <div><span style={{ opacity: 0.6 }}>Client ID utilisé :</span></div>
-              <div style={{ wordBreak: 'break-all', color: ARGILE.ink2, marginBottom: 6 }}>{idPreview}</div>
-              <div><span style={{ opacity: 0.6 }}>URI de redirection :</span></div>
-              <div style={{ wordBreak: 'break-all', color: ARGILE.ink2 }}>{redirectUri}</div>
-              <div style={{ marginTop: 6, opacity: 0.7 }}>↑ Compare le début (avant …) et la fin avec Google Console</div>
+              <div><span style={{ opacity: 0.6 }}>Client ID :</span> <span style={{ color: ARGILE.ink2 }}>{idPreview}</span></div>
+              <div style={{ marginTop: 2 }}><span style={{ opacity: 0.6 }}>Client Secret :</span> <span style={{ color: driveSecret ? ARGILE.ink2 : '#c0392b' }}>{driveSecret ? '••••••••' : '⚠ manquant — requis pour l\'échange de token'}</span></div>
+              <div style={{ marginTop: 4 }}><span style={{ opacity: 0.6 }}>URI de redirection :</span> <span style={{ color: ARGILE.ink2, wordBreak: 'break-all' }}>{redirectUri}</span></div>
             </div>
           );
         })()}
@@ -2082,16 +2090,16 @@ function ArgileSettingsRow({ icon, title, value, valueColor, trailing, toggle, t
 }
 
 // Ligne avec champ éditable inline (modifier / enregistrer / annuler)
-function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
+function ArgileEditRow({ icon, title, value, placeholder, onSave, last, inputType }) {
   const [editing, setEditing] = useStateAx(false);
-  const [input,   setInput]   = useStateAx(value || '');
+  const [input,   setInput]   = useStateAx('');
 
-  // Sync si la valeur parente change (ex: chargement initial)
+  // Sync si la valeur parente change (ex: chargement initial) — ne pas pré-remplir les champs password
   const { useEffect: useEffectAx2 } = React;
-  useEffectAx2(() => { if (!editing) setInput(value || ''); }, [value]);
+  useEffectAx2(() => { if (!editing && inputType !== 'password') setInput(value || ''); }, [value]);
 
-  const handleSave = () => { onSave(input.trim()); setEditing(false); };
-  const handleCancel = () => { setInput(value || ''); setEditing(false); };
+  const handleSave = () => { onSave(input.trim()); setEditing(false); setInput(''); };
+  const handleCancel = () => { setInput(''); setEditing(false); };
 
   return (
     <div style={{ display: 'flex', alignItems: editing ? 'flex-start' : 'center', gap: 14, padding: '14px 16px', borderBottom: last ? 'none' : `1px solid ${ARGILE.border}` }}>
@@ -2102,6 +2110,7 @@ function ArgileEditRow({ icon, title, value, placeholder, onSave, last }) {
           <div style={{ marginTop: 8 }}>
             <input
               autoFocus
+              type={inputType || 'text'}
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder={placeholder}
