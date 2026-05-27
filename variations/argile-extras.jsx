@@ -165,23 +165,30 @@ function googleOAuthToken(clientId) {
     if (cached && expiry && Date.now() < +expiry) { resolve(cached); return; }
     if (!clientId) { reject(new Error('Client ID manquant')); return; }
 
-    const redirectUri = window.location.href.replace(/[^/]*(\?.*)?$/, 'oauth.html');
+    // Strip hash/query before computing directory, to handle Safari PWA and hash-router URLs
+    const cleanHref   = window.location.href.split('#')[0].split('?')[0];
+    const redirectUri = cleanHref.substring(0, cleanHref.lastIndexOf('/') + 1) + 'oauth.html';
     const scope       = 'https://www.googleapis.com/auth/drive.file';
     const authUrl     = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id='     + encodeURIComponent(clientId)
-      + '&redirect_uri='  + encodeURIComponent(redirectUri)
+      + '?client_id='    + encodeURIComponent(clientId)
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
       + '&response_type=token'
-      + '&scope='         + encodeURIComponent(scope);
+      + '&scope='        + encodeURIComponent(scope);
+
+    // Clear any stale relay before opening the popup
+    try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
 
     const popup = window.open(authUrl, 'bt-gauth', 'width=520,height=640,left=200,top=80');
     if (!popup) { reject(new Error('Popup bloqué — autorise les popups pour ce site')); return; }
 
-    const onMsg = (event) => {
-      if (event.origin !== window.location.origin) return;
-      const d = event.data;
-      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
-      window.removeEventListener('message', onMsg);
+    let settled = false;
+    const settle = (d) => {
+      if (settled) return;
+      settled = true;
       clearInterval(watchClose);
+      window.removeEventListener('message', onMsg);
+      window.removeEventListener('storage', onStorage);
+      try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
       if (d.type === 'bt-oauth-token') {
         const exp = +(d.expiresIn || 3600);
         sessionStorage.setItem('bt_google_token', d.token);
@@ -191,13 +198,36 @@ function googleOAuthToken(clientId) {
         reject(new Error(d.error || 'auth échouée'));
       }
     };
+
+    const onMsg = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const d = event.data;
+      if (!d || !d.type || !d.type.startsWith('bt-oauth')) return;
+      settle(d);
+    };
+
+    // Safari fallback: window.opener may be null after cross-origin popup navigation (ITP)
+    const onStorage = (event) => {
+      if (event.key !== 'bt_oauth_relay' || !event.newValue) return;
+      try {
+        const d = JSON.parse(event.newValue);
+        if (d && d.type && d.type.startsWith('bt-oauth')) settle(d);
+      } catch (_) {}
+    };
+
     window.addEventListener('message', onMsg);
+    window.addEventListener('storage', onStorage);
 
     const watchClose = setInterval(() => {
       if (popup.closed) {
-        clearInterval(watchClose);
-        window.removeEventListener('message', onMsg);
-        reject(new Error('Fenêtre fermée sans authentification'));
+        if (!settled) {
+          settled = true;
+          clearInterval(watchClose);
+          window.removeEventListener('message', onMsg);
+          window.removeEventListener('storage', onStorage);
+          try { localStorage.removeItem('bt_oauth_relay'); } catch (_) {}
+          reject(new Error('Fenêtre fermée sans authentification'));
+        }
       }
     }, 600);
   });
