@@ -6,8 +6,8 @@ Trois directions exploratoires + une direction retenue (**Argile**) prête à es
 
 | Fichier | Quoi | Ouvrir avec |
 |---|---|---|
-| `Argile.html` | **Direction retenue**, app entière jouable, panneau Tweaks live | navigateur (file:// ou serveur statique) |
-| `Redesign.html` | Canvas comparatif des 3 directions (Argile · Saison · Almanach) côte à côte | navigateur |
+| `redesign/Argile.html` | **Direction retenue**, app entière jouable, panneau Tweaks live | navigateur (file:// ou serveur statique) |
+| `redesign/Redesign.html` | Canvas comparatif des 3 directions (Argile · Saison · Almanach) côte à côte | navigateur |
 
 ## Direction retenue · Argile
 
