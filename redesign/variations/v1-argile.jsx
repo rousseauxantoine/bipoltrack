@@ -131,8 +131,10 @@ function ArgileShell({ children, active, onNav, hideHeader = false }) {
       width: '100%', height: '100%', background: ARGILE.sand,
       fontFamily: 'DM Sans, sans-serif', color: ARGILE.ink, position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ height: '100%', overflowY: 'auto', paddingTop: 54, paddingBottom: 100 }}>
-        {children}
+      <div style={{ height: '100%', overflowY: 'auto' }}>
+        <div style={{ minHeight: '100%', boxSizing: 'border-box', paddingTop: 54, paddingBottom: 100 }}>
+          {children}
+        </div>
       </div>
       {/* bottom nav */}
       <div style={{
