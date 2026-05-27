@@ -1907,7 +1907,7 @@ function ArgileSettings() {
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="À propos">
-        <ArgileSettingsRow icon="❀" title="Version" value="1.0.0" />
+        <ArgileSettingsRow icon="❀" title="Version" value={APP_VERSION} />
         <ArgileSettingsRow icon="?" title="Dépôt GitHub" trailing="ouvrir →"
           onTrailing={() => window.open('https://github.com/rousseauxantoine/bipoltrack', '_blank')} last />
       </ArgileSettingsGroup>
