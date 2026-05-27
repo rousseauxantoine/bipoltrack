@@ -1931,16 +1931,20 @@ function ArgileSettings() {
           const clean = window.location.href.split('#')[0].split('?')[0];
           const redirectUri = clean.substring(0, clean.lastIndexOf('/') + 1) + 'oauth.html';
           const validFormat = driveId.trim().endsWith('.apps.googleusercontent.com');
+          const id = driveId.trim();
+          const idPreview = id.length > 30 ? id.slice(0, 16) + '…' + id.slice(-14) : id;
           return (
             <div style={{ padding: '10px 16px 12px', borderBottom: `1px solid ${ARGILE.border}`, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, lineHeight: 1.7 }}>
               {!validFormat && (
-                <div style={{ color: '#c0392b', marginBottom: 4 }}>
-                  ⚠ Le Client ID doit se terminer par <em>.apps.googleusercontent.com</em>
+                <div style={{ color: '#c0392b', marginBottom: 6 }}>
+                  ⚠ Le Client ID doit se terminer par .apps.googleusercontent.com
                 </div>
               )}
+              <div><span style={{ opacity: 0.6 }}>Client ID utilisé :</span></div>
+              <div style={{ wordBreak: 'break-all', color: ARGILE.ink2, marginBottom: 6 }}>{idPreview}</div>
               <div><span style={{ opacity: 0.6 }}>URI de redirection :</span></div>
               <div style={{ wordBreak: 'break-all', color: ARGILE.ink2 }}>{redirectUri}</div>
-              <div style={{ marginTop: 4, opacity: 0.7 }}>↑ Vérifie que cette URI exacte est dans Google Console → Identifiants → URI de redirection autorisés</div>
+              <div style={{ marginTop: 6, opacity: 0.7 }}>↑ Compare le début (avant …) et la fin avec Google Console</div>
             </div>
           );
         })()}
