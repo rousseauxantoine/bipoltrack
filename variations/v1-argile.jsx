@@ -471,13 +471,17 @@ function ArgileJournalSaisie({ onNext }) {
   const [note, setNote] = useStateA('');
 
   const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const alreadyFilled = LS.getJSON('bt_entries', []).some(e => e.date === new Date().toISOString().slice(0, 10));
 
   return (
     <div style={{ padding: '0 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
-          {todayLabel}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
+            {todayLabel}
+          </p>
+          {alreadyFilled && <span style={{ color: '#5A9E6F', fontSize: 13, lineHeight: 1 }}>✓</span>}
+        </div>
         <div style={{ display: 'flex', gap: 4 }}>
           {[0, 1].map(i => <div key={i} style={{ width: 24, height: 3, borderRadius: 2, background: i === 0 ? ARGILE.clay : ARGILE.border }} />)}
         </div>
