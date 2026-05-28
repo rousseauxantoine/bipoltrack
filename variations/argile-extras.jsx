@@ -598,6 +598,13 @@ function ArgileStatsDeep() {
   const [refreshKey,        setRefreshKey]        = useStateAx(0);
   const [editDate,          setEditDate]          = useStateAx(null);
   const [phaseAlgoRefresh,  setPhaseAlgoRefresh]  = useStateAx(0);
+  const [phaseAlgo,         setPhaseAlgo]         = useStateAx(LS.get('bt_phase_algo') || '21j');
+
+  const handlePhaseAlgoChange = (v) => {
+    setPhaseAlgo(v);
+    LS.set('bt_phase_algo', v);
+    window.dispatchEvent(new CustomEvent('bipoltrack:phaseAlgoChanged'));
+  };
 
   const { useEffect: useEffectStats } = React;
   useEffectStats(() => {
@@ -970,6 +977,22 @@ function ArgileStatsDeep() {
           </span>
         </div>
       </div>
+
+      {/* ── Simulation des phases ── */}
+      <ArgileSettingsGroup label="Simulation des phases">
+        <ArgileSegmentRow
+          icon="~"
+          title="Algorithme d'anticipation"
+          desc={phaseAlgo === 'regression90' ? 'Durée estimée depuis les 90 derniers jours' : 'Cycle fixe de 21 jours depuis le dernier changement'}
+          options={[
+            { value: '21j',          label: '21 jours · fixe' },
+            { value: 'regression90', label: 'Régression · 90j' },
+          ]}
+          value={phaseAlgo}
+          onChange={handlePhaseAlgoChange}
+          last
+        />
+      </ArgileSettingsGroup>
 
       {/* ── Distribution sommeil ── */}
       {sleepDist.some(b => b.c > 0) && (
@@ -1817,19 +1840,12 @@ function ArgileSettings() {
   const [driveId,       setDriveId]       = useStateAx(LS.get('bt_drive_client_id'));
   const [driveSecret,   setDriveSecret]   = useStateAx(LS.get('bt_drive_client_secret'));
   const [syncAuto,      setSyncAuto]      = useStateAx(LS.get('bt_auto_backup') === 'true');
-  const [phaseAlgo,     setPhaseAlgo]     = useStateAx(LS.get('bt_phase_algo') || '21j');
   const [exportFeedback,  setExportFeedback]  = useStateAx('');
   const [syncMessage,     setSyncMessage]    = useStateAx('');
   const [backupFeedback,  setBackupFeedback] = useStateAx('');
   const [syncFeedback,    setSyncFeedback]   = useStateAx('');
 
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
-
-  const handlePhaseAlgoChange = (v) => {
-    setPhaseAlgo(v);
-    LS.set('bt_phase_algo', v);
-    window.dispatchEvent(new CustomEvent('bipoltrack:phaseAlgoChanged'));
-  };
 
   const saveDriveId = (v) => {
     const cleaned = v.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
@@ -2038,21 +2054,6 @@ function ArgileSettings() {
         <ArgileSettingsRow icon="⤓" title="Exporter en CSV" value="Pour tableur"
           trailing={exportFeedback === 'csv' ? 'exporté ✓' : 'exporter →'}
           onTrailing={exportCSV} last />
-      </ArgileSettingsGroup>
-
-      <ArgileSettingsGroup label="Simulation des phases">
-        <ArgileSegmentRow
-          icon="~"
-          title="Algorithme d'anticipation"
-          desc={phaseAlgo === 'regression90' ? 'Durée estimée depuis les 90 derniers jours' : 'Cycle fixe de 21 jours depuis le dernier changement'}
-          options={[
-            { value: '21j',          label: '21 jours · fixe' },
-            { value: 'regression90', label: 'Régression · 90j' },
-          ]}
-          value={phaseAlgo}
-          onChange={handlePhaseAlgoChange}
-          last
-        />
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="Sources d'information">
