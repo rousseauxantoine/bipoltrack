@@ -349,7 +349,7 @@ async function newsTestFeed(url) {
 
 async function newsFetchOneFeed(url) {
   try {
-    const resp = await fetch(NEWS_RSS_PROXY + encodeURIComponent(url));
+    const resp = await fetch(NEWS_RSS_PROXY + encodeURIComponent(url), { cache: 'no-store' });
     const data = await resp.json();
     if (data.status !== 'ok') throw new Error(data.message || 'flux invalide');
     const sourceName = (data.feed && data.feed.title) || new URL(url).hostname;
@@ -376,16 +376,19 @@ function ArgileNews() {
 
   const loadFeeds = async () => {
     setLoading(true);
-    const feeds = await newsResolveFeeds();
-    const urls = feeds.map(f => f.url).filter(Boolean);
-    if (!urls.length) { setLoading(false); setArticles([]); return; }
-    const results = await Promise.all(urls.map(newsFetchOneFeed));
-    const all = results.flat().sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
-    const today = new Date().toISOString().slice(0, 10);
-    LS.setJSON('bt_news_cache', { date: today, articles: all });
-    setArticles(all);
-    setCacheDate(today);
-    setLoading(false);
+    try {
+      const feeds = await newsResolveFeeds();
+      const urls = feeds.map(f => f.url).filter(Boolean);
+      if (!urls.length) { setArticles([]); setCacheDate(null); return; }
+      const results = await Promise.all(urls.map(newsFetchOneFeed));
+      const all = results.flat().sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+      const today = new Date().toISOString().slice(0, 10);
+      LS.setJSON('bt_news_cache', { date: today, articles: all });
+      setArticles(all);
+      setCacheDate(today);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffectAx(() => {
