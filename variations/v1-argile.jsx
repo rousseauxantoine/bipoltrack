@@ -480,10 +480,25 @@ function ArgileJournalSaisie({ onNext }) {
     const idx = ARGILE_ENERGIE_OPTS.findIndex(o => o.id === todayEntry?.energie);
     return idx >= 0 ? idx : 1;
   });
-  const [note, setNote] = useStateA(() => todayEntry?.note || '');
+  const [sleep,        setSleep]        = useStateA(() => todayEntry?.sleep        ?? 7);
+  const [symptoms,     setSymptoms]     = useStateA(() => todayEntry?.symptoms     || []);
+  const [menstruation, setMenstruation] = useStateA(() => todayEntry?.menstruation || []);
+  const [note,         setNote]         = useStateA(() => todayEntry?.note         || '');
 
   const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
   const alreadyFilled = !!todayEntry;
+
+  const tog = (setter) => (id) =>
+    setter(arr => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+
+  const inputSt = { width: '100%', accentColor: ARGILE.clay };
+  const chipSt  = (on) => ({
+    padding: '6px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+    border: `1.5px solid ${on ? ARGILE.clay : ARGILE.border}`,
+    background: on ? 'rgba(184,88,57,0.10)' : 'transparent',
+    color: on ? ARGILE.clay : ARGILE.ink2,
+  });
+  const labelSt = { fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' };
 
   return (
     <div style={{ padding: '0 24px' }}>
@@ -503,6 +518,40 @@ function ArgileJournalSaisie({ onNext }) {
       <ArgileSnapSlider dimLabel="02 — les pensées" opts={ARGILE_PENSEES_OPTS} value={pensees} onChange={setPensees} />
       <ArgileSnapSlider dimLabel="03 — l'énergie"   opts={ARGILE_ENERGIE_OPTS} value={energie} onChange={setEnergie} />
 
+      {/* Sommeil */}
+      <div style={{ marginBottom: 20 }}>
+        <p style={labelSt}>Sommeil · {sleep}h</p>
+        <input type="range" min="0" max="12" step="0.5" value={sleep}
+          onChange={e => setSleep(+e.target.value)} style={inputSt} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+          <span>0h</span><span>6h</span><span>12h</span>
+        </div>
+      </div>
+
+      {/* Symptômes */}
+      <div style={{ marginBottom: 20 }}>
+        <p style={{ ...labelSt, margin: '0 0 10px' }}>Symptômes</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ARGILE_SYMPTOMS.map(s => (
+            <button key={s.id} onClick={() => tog(setSymptoms)(s.id)} style={chipSt(symptoms.includes(s.id))}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Cycle */}
+      <div style={{ marginBottom: 20 }}>
+        <p style={{ ...labelSt, margin: '0 0 10px' }}>Cycle</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {ARGILE_MENSTRUATION.map(m => (
+            <button key={m.id} onClick={() => tog(setMenstruation)(m.id)} style={chipSt(menstruation.includes(m.id))}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ marginBottom: 8 }}>
         <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Une note ?</span>
         <p style={{ fontSize: 12, color: ARGILE.muted, margin: '4px 0 10px' }}>Optionnel. Ce qui te traverse.</p>
@@ -518,7 +567,10 @@ function ArgileJournalSaisie({ onNext }) {
         ARGILE_HUMEUR_OPTS[humeur].id,
         ARGILE_PENSEES_OPTS[pensees].id,
         ARGILE_ENERGIE_OPTS[energie].id,
-        note
+        note,
+        sleep,
+        symptoms,
+        menstruation
       )} style={{
         width: '100%', marginTop: 20, padding: '16px 20px', border: 'none', borderRadius: 100,
         background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
@@ -1048,18 +1100,18 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const finish = tweaks.finish || 'lisse';
 
   // Sauvegarde de l'entrée dans bt_entries (même clé que la version legacy)
-  const saveEntry = ({ humeur, pensees, energie, meds, note }) => {
+  const saveEntry = ({ humeur, pensees, energie, meds, note, sleep, symptoms, menstruation }) => {
     const moodVal = (ARGILE_HUMEUR_OPTS.find(o => o.id === humeur) || ARGILE_HUMEUR_OPTS[1]).moodVal;
     const today = new Date().toISOString().slice(0, 10);
     const entry = {
       date: today,
       humeur, pensees, energie,
-      mood: moodVal,   // rétrocompat graphiques/calendrier
-      sleep: null, anxiety: null, symptoms: [],
+      mood: moodVal,
+      sleep: sleep ?? null, anxiety: null, symptoms: symptoms || [],
       meds,
       note,
       effects: [],
-      menstruation: [],
+      menstruation: menstruation || [],
       ts: Date.now(),
     };
     const entries = LS.getJSON('bt_entries', []);
@@ -1078,7 +1130,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   };
 
   let body;
-  if (screen === 'journal')        body = <ArgileJournalSaisie onNext={(h, p, e, note) => { setJournalDraft({ humeur: h, pensees: p, energie: e, note }); setScreen('traitements'); }} />;
+  if (screen === 'journal')        body = <ArgileJournalSaisie onNext={(h, p, e, note, sleep, symptoms, menstruation) => { setJournalDraft({ humeur: h, pensees: p, energie: e, note, sleep, symptoms, menstruation }); setScreen('traitements'); }} />;
   else if (screen === 'traitements') body = <ArgileJournalTraitements onSave={(meds) => { saveEntry({ ...journalDraft, meds }); setScreen('done'); }} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
