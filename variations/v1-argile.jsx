@@ -465,13 +465,25 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
 
 // ───── Journal · étape 1 — 3 états ─────
 function ArgileJournalSaisie({ onNext }) {
-  const [humeur,  setHumeur]  = useStateA(1);
-  const [pensees, setPensees] = useStateA(1);
-  const [energie, setEnergie] = useStateA(1);
-  const [note, setNote] = useStateA('');
+  const today = new Date().toISOString().slice(0, 10);
+  const todayEntry = LS.getJSON('bt_entries', []).find(e => e.date === today);
+
+  const [humeur,  setHumeur]  = useStateA(() => {
+    const idx = ARGILE_HUMEUR_OPTS.findIndex(o => o.id === todayEntry?.humeur);
+    return idx >= 0 ? idx : 1;
+  });
+  const [pensees, setPensees] = useStateA(() => {
+    const idx = ARGILE_PENSEES_OPTS.findIndex(o => o.id === todayEntry?.pensees);
+    return idx >= 0 ? idx : 1;
+  });
+  const [energie, setEnergie] = useStateA(() => {
+    const idx = ARGILE_ENERGIE_OPTS.findIndex(o => o.id === todayEntry?.energie);
+    return idx >= 0 ? idx : 1;
+  });
+  const [note, setNote] = useStateA(() => todayEntry?.note || '');
 
   const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
-  const alreadyFilled = LS.getJSON('bt_entries', []).some(e => e.date === new Date().toISOString().slice(0, 10));
+  const alreadyFilled = !!todayEntry;
 
   return (
     <div style={{ padding: '0 24px' }}>
@@ -521,7 +533,11 @@ function ArgileJournalSaisie({ onNext }) {
 // ───── Journal · étape 2 — Traitements ─────
 function ArgileJournalTraitements({ onSave }) {
   const [meds, setMeds] = useStateA(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false));
-  const [checkedMeds, setCheckedMeds] = useStateA(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false).map(m => m.id));
+  const [checkedMeds, setCheckedMeds] = useStateA(() => {
+    const todayEntry = LS.getJSON('bt_entries', []).find(e => e.date === new Date().toISOString().slice(0, 10));
+    if (todayEntry?.meds) return todayEntry.meds;
+    return LS.getJSON('bt_meds', []).filter(m => m.active !== false).map(m => m.id);
+  });
   const [showConfirm, setShowConfirm] = useStateA(false);
   const [showAddMed, setShowAddMed] = useStateA(false);
   const [medForm, setMedForm] = useStateA({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
