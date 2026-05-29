@@ -828,8 +828,9 @@ function ArgileDone() {
 
   return (
     <div style={{
-      width: '100%', height: '100%', background: `radial-gradient(ellipse at 50% 30%, ${ARGILE.cream} 0%, ${ARGILE.sand} 70%)`,
-      position: 'relative', overflow: 'hidden',
+      position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
+      background: `radial-gradient(ellipse at 50% 30%, ${ARGILE.cream} 0%, ${ARGILE.sand} 70%)`,
+      overflow: 'hidden',
     }}>
       <style>{`
         @keyframes argile-sun-core { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
