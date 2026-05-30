@@ -1536,12 +1536,13 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   else if (screen === 'report'  && window.ArgileReport)  body = <ArgileReport />;
   else if (screen === 'settings' && window.ArgileSettings) body = <ArgileSettings />;
   else if (screen === 'stats-deep' && window.ArgileStatsDeep) body = <ArgileStatsDeep />;
+  else if (screen === 'cycle'      && window.ArgileCycle)     body = <ArgileCycle />;
   else body = <ArgileJournalMood orbFinish={finish} />;
 
   // Group journal sub-screens under "journal" tab; report/history/settings under their nearest tab
   let active;
   if (['done','journal','traitements','empty'].includes(screen)) active = 'journal';
-  else if (screen === 'history' || screen === 'stats' || screen === 'stats-deep') active = 'stats';
+  else if (screen === 'history' || screen === 'stats' || screen === 'stats-deep' || screen === 'cycle') active = 'stats';
   else if (screen === 'meds' || screen === 'report') active = 'meds';
   else if (screen === 'news') active = 'news';
   else if (screen === 'settings') active = 'settings';

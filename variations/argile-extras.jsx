@@ -2685,7 +2685,470 @@ function ArgileTutorial({ onClose }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// HUMEUR × CYCLE — graphique de mise en regard (issue #47)
+// ══════════════════════════════════════════════════════════════════════
+
+// Cycle phase metadata (mirrors lib/core.js — no import available in browser)
+const _CYCLE_PHASES = [
+  { id: 'regles', label: 'Règles',       color: '#C0473F' },
+  { id: 'follic', label: 'Folliculaire', color: '#4F8A6B' },
+  { id: 'ovul',   label: 'Ovulation',    color: '#D4A23A' },
+  { id: 'luteal', label: 'Lutéale',      color: '#6F77B3' },
+];
+const _CYCLE_PHASE_MAP = Object.fromEntries(_CYCLE_PHASES.map(p => [p.id, p]));
+const _MOOD_BAR_H  = { 1: 26, 2: 46, 3: 68 };
+const _MOOD_LABELS = { 1: 'Petite', 2: 'Moyenne', 3: 'Grande' };
+
+// Duplicated pure helpers from lib/core.js (globally scoped JSX cannot import)
+function _cycleMoodLevel(entry) {
+  const zone = humeurZoneOf(entry);
+  if (!zone) return null;
+  return ARGILE_HUMEUR_OPTS.indexOf(zone) + 1;
+}
+
+function _computeCycleDay(dateStr, lastPeriodStartStr, L = 28) {
+  const dateMs  = new Date(dateStr            + 'T00:00:00Z').getTime();
+  const startMs = new Date(lastPeriodStartStr + 'T00:00:00Z').getTime();
+  const days    = Math.floor((dateMs - startMs) / 86400000);
+  return ((days % L) + L) % L + 1;
+}
+
+function _phaseOf(cycleDay, L = 28, D = 5) {
+  const ovDay = L - 14;
+  if (cycleDay <= D)      return 'regles';
+  if (cycleDay < ovDay)   return 'follic';
+  if (cycleDay === ovDay) return 'ovul';
+  return 'luteal';
+}
+
+function _cycleConf(settings) {
+  if (!settings?.isCycleTrackingEnabled || !settings?.lastPeriodStart) return 'none';
+  const logged = settings.cyclesLogged ?? 0;
+  if (logged === 0) return 'none';
+  if (logged <= 2)  return 'low';
+  if ((settings.cycleLengthStdDev ?? 0) > 4) return 'low';
+  return 'high';
+}
+
+function _buildCycleCells(entries, settings, startDate, endDate) {
+  const entryMap   = Object.fromEntries(entries.map(e => [e.date, e]));
+  const confidence = _cycleConf(settings);
+  const L  = settings?.avgCycleLength  ?? 28;
+  const D  = settings?.avgPeriodLength ?? 5;
+  const lp = settings?.lastPeriodStart ?? null;
+
+  const cells   = [];
+  const startMs = new Date(startDate + 'T00:00:00Z').getTime();
+  const endMs   = new Date(endDate   + 'T00:00:00Z').getTime();
+
+  for (let ms = startMs; ms <= endMs; ms += 86400000) {
+    const date      = new Date(ms).toISOString().slice(0, 10);
+    const entry     = entryMap[date] ?? null;
+    const moodLevel = entry ? _cycleMoodLevel(entry) : null;
+    let cycleDay = null, phase = null;
+    if (confidence !== 'none' && lp) {
+      cycleDay = _computeCycleDay(date, lp, L);
+      phase    = _phaseOf(cycleDay, L, D);
+    }
+    cells.push({ date, moodLevel, cycleDay, phase, isPredicted: true, confidence });
+  }
+  return cells;
+}
+
+// ── MoodCycleChart SVG ────────────────────────────────────────────────
+
+function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
+  const [hovIdx, setHovIdx]   = useStateAx(null);
+  const [touchLock, setTouch] = useStateAx(null);
+
+  const L  = cycleSettings?.avgCycleLength ?? 28;
+  const lp = cycleSettings?.lastPeriodStart;
+
+  const startDate = lp ?? new Date().toISOString().slice(0, 10);
+  const endMs   = new Date(startDate + 'T00:00:00Z').getTime() + numCycles * L * 86400000 - 86400000;
+  const endDate = new Date(endMs).toISOString().slice(0, 10);
+
+  const cells = _buildCycleCells(entries, cycleSettings, startDate, endDate);
+  const conf  = _cycleConf(cycleSettings);
+
+  // SVG dimensions
+  const COL_W     = 20;
+  const BAR_W     = 9;
+  const MOOD_H    = 120;
+  const MED_Y     = 60;
+  const CYCLE_TOP = MOOD_H + 10;
+  const CYCLE_H   = 26;
+  const AXIS_Y    = CYCLE_TOP + CYCLE_H + 14;
+  const SVG_H     = AXIS_Y + 14;
+  const PAD_L     = 4;
+  const totalW    = PAD_L + cells.length * COL_W + 4;
+
+  const activeIdx = touchLock ?? hovIdx;
+  const hovCell   = activeIdx != null ? cells[activeIdx] : null;
+
+  return (
+    <div style={{ position: 'relative', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
+      <svg
+        width={totalW}
+        height={SVG_H}
+        style={{ display: 'block', userSelect: 'none' }}
+        aria-label={`Graphique humeur et cycle menstruel — ${cells.length} jours`}
+      >
+        {/* Cycle-separator dotted lines + cycle labels */}
+        {Array.from({ length: numCycles }, (_, ci) => {
+          const x0      = PAD_L + ci * L * COL_W;
+          const labelX  = x0 + (L * COL_W) / 2;
+          return (
+            <g key={'sep' + ci}>
+              {ci > 0 && (
+                <line x1={x0} y1={0} x2={x0} y2={CYCLE_TOP + CYCLE_H}
+                  stroke="#E3D8C5" strokeWidth={1.5} strokeDasharray="3 5" />
+              )}
+              <text x={labelX} y={11} textAnchor="middle"
+                fill="#9B826A" fontSize={9}
+                fontFamily="JetBrains Mono, monospace"
+              >
+                CYCLE {ci + 1}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Median dotted line */}
+        <line x1={PAD_L} y1={MED_Y} x2={PAD_L + cells.length * COL_W} y2={MED_Y}
+          stroke="#E3D8C5" strokeWidth={1} strokeDasharray="2 4" />
+
+        {/* Cycle phase band */}
+        {conf !== 'none' && cells.map((cell, i) => {
+          if (!cell.phase) return null;
+          return (
+            <rect key={cell.date + '-ph'}
+              x={PAD_L + i * COL_W} y={CYCLE_TOP}
+              width={COL_W} height={CYCLE_H}
+              fill={_CYCLE_PHASE_MAP[cell.phase].color}
+              opacity={cell.confidence === 'low' ? 0.3 : 0.65}
+            />
+          );
+        })}
+
+        {/* Mood bars */}
+        {cells.map((cell, i) => {
+          if (!cell.moodLevel) return null;
+          const h    = _MOOD_BAR_H[cell.moodLevel];
+          const barX = PAD_L + i * COL_W + (COL_W - BAR_W) / 2;
+          const barY = MED_Y - h / 2;
+          const fill = cell.phase ? _CYCLE_PHASE_MAP[cell.phase].color : '#9B826A';
+          return (
+            <rect key={cell.date + '-bar'}
+              x={barX} y={barY}
+              width={BAR_W} height={h}
+              rx={3}
+              fill={fill}
+              opacity={cell.confidence === 'low' ? 0.55 : 1}
+            />
+          );
+        })}
+
+        {/* Axis day labels (J1, J7, J14, J21, J28 per cycle) */}
+        {cells.map((cell, i) => {
+          if (!cell.cycleDay) return null;
+          if (cell.cycleDay !== 1 && cell.cycleDay % 7 !== 0) return null;
+          return (
+            <text key={cell.date + '-ax'}
+              x={PAD_L + i * COL_W + COL_W / 2} y={AXIS_Y + 10}
+              textAnchor="middle"
+              fill="#9B826A" fontSize={8}
+              fontFamily="JetBrains Mono, monospace"
+            >
+              J{cell.cycleDay}
+            </text>
+          );
+        })}
+
+        {/* Hover highlight */}
+        {activeIdx != null && (
+          <rect
+            x={PAD_L + activeIdx * COL_W} y={14}
+            width={COL_W} height={CYCLE_TOP + CYCLE_H - 14}
+            fill="rgba(43,24,16,0.06)" rx={2}
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
+
+        {/* Hit areas (mouse + touch) */}
+        {cells.map((cell, i) => (
+          <rect key={cell.date + '-hit'}
+            x={PAD_L + i * COL_W} y={0}
+            width={COL_W} height={SVG_H}
+            fill="transparent"
+            onMouseEnter={() => { if (touchLock == null) setHovIdx(i); }}
+            onMouseLeave={() => setHovIdx(null)}
+            onTouchStart={(e) => { e.preventDefault(); setTouch(touchLock === i ? null : i); }}
+            aria-label={[
+              cell.date,
+              cell.cycleDay ? `J${cell.cycleDay}` : null,
+              cell.moodLevel ? `Humeur ${_MOOD_LABELS[cell.moodLevel]}` : 'Non renseigné',
+              cell.phase ? _CYCLE_PHASE_MAP[cell.phase].label : null,
+              cell.isPredicted && cell.phase ? '(estimé)' : null,
+            ].filter(Boolean).join(' — ')}
+          />
+        ))}
+      </svg>
+
+      {/* Tooltip */}
+      {hovCell && (
+        <div style={{
+          position: 'absolute',
+          bottom: SVG_H + 6,
+          left: Math.max(0, Math.min(
+            PAD_L + activeIdx * COL_W - 60,
+            totalW - 168
+          )),
+          background: '#2C2620',
+          color: '#FBF7EF',
+          borderRadius: 10,
+          padding: '8px 12px',
+          fontSize: 12,
+          lineHeight: 1.55,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          zIndex: 20,
+          fontFamily: 'DM Sans, sans-serif',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.28)',
+        }}>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, opacity: 0.65, marginBottom: 2 }}>
+            {hovCell.date}{hovCell.cycleDay ? ` · J${hovCell.cycleDay}` : ''}
+          </div>
+          <div>
+            {hovCell.moodLevel
+              ? `Humeur ${_MOOD_LABELS[hovCell.moodLevel]}`
+              : <span style={{ opacity: 0.45 }}>Non renseigné</span>}
+          </div>
+          {hovCell.phase && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              <span style={{
+                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                background: _CYCLE_PHASE_MAP[hovCell.phase].color, flexShrink: 0,
+              }} />
+              {_CYCLE_PHASE_MAP[hovCell.phase].label}
+              {hovCell.isPredicted && (
+                <span style={{ opacity: 0.5, fontSize: 10 }}>(estimé)</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {conf === 'low' && (
+        <p style={{
+          margin: '10px 0 0', fontSize: 11, color: '#9B826A', lineHeight: 1.5,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+        }}>
+          Estimation — les phases sont approximatives (peu de cycles enregistrés).
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Légende ───────────────────────────────────────────────────────────
+
+function MoodCycleLegend() {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', marginTop: 14, alignItems: 'center' }}>
+      {[1, 2, 3].map(lv => (
+        <div key={'ml' + lv} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <svg width={8} height={_MOOD_BAR_H[lv]} style={{ flexShrink: 0 }}>
+            <rect x={0} y={0} width={8} height={_MOOD_BAR_H[lv]} rx={2} fill="#9B826A" />
+          </svg>
+          <span style={{ fontSize: 11, color: '#5C4733' }}>{_MOOD_LABELS[lv]}</span>
+        </div>
+      ))}
+      {_CYCLE_PHASES.map(ph => (
+        <div key={'ph' + ph.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            display: 'inline-block', width: 12, height: 12, borderRadius: 3,
+            background: ph.color, flexShrink: 0,
+          }} />
+          <span style={{ fontSize: 11, color: '#5C4733' }}>{ph.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── ArgileCycle — écran complet ────────────────────────────────────────
+
+function ArgileCycle() {
+  const readSettings = () => {
+    const lp = LS.get('bt_cycle_last_period', '');
+    if (!lp) return null;
+    return {
+      isCycleTrackingEnabled: true,
+      lastPeriodStart: lp,
+      avgCycleLength:  parseInt(LS.get('bt_cycle_length',        '28'), 10) || 28,
+      avgPeriodLength: parseInt(LS.get('bt_cycle_period_length', '5'),  10) || 5,
+      cyclesLogged:    parseInt(LS.get('bt_cycle_logged',         '0'),  10) || 0,
+    };
+  };
+
+  const [settings,  setSettings]  = useStateAx(readSettings);
+  const [numCycles, setNumCycles] = useStateAx(2);
+  const [showSetup, setShowSetup] = useStateAx(!readSettings());
+
+  const [setupDate, setSetupDate] = useStateAx(
+    LS.get('bt_cycle_last_period', '') || new Date().toISOString().slice(0, 10)
+  );
+  const [setupLen,  setSetupLen]  = useStateAx(LS.get('bt_cycle_length',        '28'));
+  const [setupPLen, setSetupPLen] = useStateAx(LS.get('bt_cycle_period_length', '5'));
+
+  const entries = LS.getJSON('bt_entries', []);
+
+  function saveSetup() {
+    LS.set('bt_cycle_last_period',   setupDate);
+    LS.set('bt_cycle_length',        setupLen);
+    LS.set('bt_cycle_period_length', setupPLen);
+    LS.set('bt_cycle_enabled',       'true');
+    const updated = {
+      isCycleTrackingEnabled: true,
+      lastPeriodStart: setupDate,
+      avgCycleLength:  parseInt(setupLen,  10) || 28,
+      avgPeriodLength: parseInt(setupPLen, 10) || 5,
+      cyclesLogged:    parseInt(LS.get('bt_cycle_logged', '0'), 10) || 0,
+    };
+    setSettings(updated);
+    setShowSetup(false);
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+    border: '1.5px solid rgba(43,24,16,0.15)', borderRadius: 12,
+    fontSize: 14, background: ARGILE.cream, color: ARGILE.ink,
+    fontFamily: 'DM Sans, sans-serif', outline: 'none',
+  };
+  const labelStyle = {
+    display: 'block', marginBottom: 6, fontSize: 10,
+    letterSpacing: '0.12em', textTransform: 'uppercase',
+    color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace',
+  };
+
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: '#FBF7EF',
+      overflowY: 'auto', boxSizing: 'border-box',
+      padding: '20px 16px 40px',
+    }}>
+      {/* Header */}
+      <div style={{ marginBottom: 22 }}>
+        <p style={{
+          margin: '0 0 4px', fontSize: 10, letterSpacing: '0.14em',
+          textTransform: 'uppercase', color: ARGILE.clay,
+          fontFamily: 'JetBrains Mono, monospace',
+        }}>
+          Humeur & Cycle
+        </p>
+        <h1 style={{
+          margin: 0, fontFamily: 'Instrument Serif, serif',
+          fontSize: 32, fontWeight: 400, color: ARGILE.ink, lineHeight: 1.1,
+        }}>
+          Comparatif <span style={{ fontStyle: 'italic' }}>cycle</span>
+        </h1>
+      </div>
+
+      {showSetup ? (
+        <div>
+          <p style={{ fontSize: 14, color: ARGILE.ink2, lineHeight: 1.6, marginBottom: 22 }}>
+            Renseigne tes informations de cycle pour visualiser la corrélation avec ton humeur.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
+            <div>
+              <label style={labelStyle}>Début des dernières règles</label>
+              <input type="date" value={setupDate}
+                onChange={e => setSetupDate(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Durée moyenne du cycle (jours)</label>
+              <input type="number" min="21" max="45" value={setupLen}
+                onChange={e => setSetupLen(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Durée des règles (jours)</label>
+              <input type="number" min="2" max="10" value={setupPLen}
+                onChange={e => setSetupPLen(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <p style={{
+            fontSize: 11, color: ARGILE.muted, lineHeight: 1.5, marginBottom: 22,
+            fontStyle: 'italic', fontFamily: 'Instrument Serif, serif',
+          }}>
+            Ce graphique est un outil de suivi, pas de diagnostic. Les phases du cycle sont des estimations.
+          </p>
+          <button onClick={saveSetup} style={{
+            width: '100%', padding: '16px', border: 'none', borderRadius: 100,
+            background: ARGILE.clay, color: ARGILE.paper,
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+            fontSize: 18, cursor: 'pointer',
+          }}>
+            Afficher le graphique →
+          </button>
+        </div>
+      ) : (
+        <div>
+          {/* Controls */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
+            {[1, 2].map(n => (
+              <button key={n} onClick={() => setNumCycles(n)} style={{
+                padding: '6px 16px', borderRadius: 100, border: 'none',
+                cursor: 'pointer', fontSize: 13,
+                background: numCycles === n ? ARGILE.ink : ARGILE.sand2,
+                color: numCycles === n ? ARGILE.paper : ARGILE.ink,
+                fontFamily: 'DM Sans, sans-serif',
+              }}>
+                {n === 1 ? '1 cycle' : '2 cycles'}
+              </button>
+            ))}
+            <button onClick={() => setShowSetup(true)} style={{
+              marginLeft: 'auto', padding: '6px 12px', borderRadius: 100,
+              border: `1px solid ${ARGILE.border}`, background: 'transparent',
+              color: ARGILE.muted, fontSize: 11, cursor: 'pointer',
+              fontFamily: 'DM Sans, sans-serif',
+            }}>
+              ⚙ Modifier
+            </button>
+          </div>
+
+          {/* Chart card */}
+          <div style={{
+            background: ARGILE.paper, borderRadius: 20,
+            padding: '20px 14px 16px',
+            border: `1px solid ${ARGILE.border}`,
+          }}>
+            <MoodCycleChart
+              entries={entries}
+              cycleSettings={settings}
+              numCycles={numCycles}
+            />
+            <MoodCycleLegend />
+          </div>
+
+          {/* Disclaimer */}
+          <p style={{
+            marginTop: 14, fontSize: 11, color: '#6F77B3', lineHeight: 1.55,
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+            padding: '10px 14px',
+            background: 'rgba(111,119,179,0.07)',
+            borderRadius: 12, border: '1px solid rgba(111,119,179,0.18)',
+          }}>
+            Ce graphique montre une corrélation possible, jamais une causalité. Les phases du cycle sont des estimations.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
   ArgileEmpty, ArgileNews, ArgileStatsDeep, ArgileMeds, ArgileReport, ArgileHistory, ArgileSettings,
-  ArgileEditEntry, ArgileWelcome, ArgileTutorial,
+  ArgileEditEntry, ArgileWelcome, ArgileTutorial, ArgileCycle,
 });
