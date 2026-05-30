@@ -1845,6 +1845,31 @@ function ArgileSettings() {
   const [backupFeedback,  setBackupFeedback] = useStateAx('');
   const [syncFeedback,    setSyncFeedback]   = useStateAx('');
 
+  // Notifications
+  const [notifTime,   setNotifTime]   = useStateAx(LS.get('bt_notification_time', '20:00'));
+  const [lateNotif,   setLateNotif]   = useStateAx(LS.get('bt_notification_late_enabled', 'true') === 'true');
+  const [notifPerm,   setNotifPerm]   = useStateAx(() =>
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
+
+  const requestNotifPermission = async () => {
+    if (typeof Notification === 'undefined') return;
+    const result = await Notification.requestPermission();
+    setNotifPerm(result);
+  };
+
+  const saveNotifTime = (t) => {
+    const val = t.trim() || '20:00';
+    LS.set('bt_notification_time', val);
+    setNotifTime(val);
+  };
+
+  const toggleLateNotif = () => {
+    const next = !lateNotif;
+    LS.set('bt_notification_late_enabled', String(next));
+    setLateNotif(next);
+  };
+
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
 
   const saveDriveId = (v) => {
@@ -2058,6 +2083,70 @@ function ArgileSettings() {
 
       <ArgileSettingsGroup label="Sources d'information">
         <ArgileRssManager />
+      </ArgileSettingsGroup>
+
+      <ArgileSettingsGroup label="Rappels">
+        <div style={{ padding: '14px 16px', borderBottom: `1px solid ${ARGILE.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: ARGILE.sand2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Instrument Serif, serif', fontSize: 16, color: ARGILE.ink, fontStyle: 'italic', flexShrink: 0 }}>◷</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, color: ARGILE.ink, fontWeight: 500 }}>Heure du rappel</div>
+              <div style={{ fontSize: 11, color: ARGILE.muted, marginTop: 2 }}>Rappel principal si aucune saisie</div>
+            </div>
+            <input
+              type="time"
+              value={notifTime}
+              min="08:00"
+              max="21:00"
+              onChange={e => saveNotifTime(e.target.value)}
+              style={{
+                border: `1.5px solid ${ARGILE.border}`, borderRadius: 8,
+                padding: '5px 8px', fontSize: 13,
+                fontFamily: 'JetBrains Mono, monospace', color: ARGILE.ink,
+                background: ARGILE.cream, outline: 'none',
+              }}
+            />
+          </div>
+        </div>
+        <ArgileSettingsRow
+          icon="◑"
+          title="Rappel tardif (21h30)"
+          value={lateNotif ? 'Activé · si aucune saisie après 21h' : 'Désactivé'}
+          toggle toggleValue={lateNotif} onToggle={toggleLateNotif}
+        />
+        <div style={{ padding: '14px 16px', borderTop: `1px solid ${ARGILE.border}` }}>
+          {notifPerm === 'unsupported' && (
+            <div style={{ fontSize: 12, color: ARGILE.muted, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
+              Les notifications ne sont pas disponibles sur ce navigateur.
+            </div>
+          )}
+          {notifPerm === 'granted' && (
+            <div style={{ fontSize: 12, color: '#5A9E6F' }}>
+              Notifications autorisées ✓
+            </div>
+          )}
+          {notifPerm === 'denied' && (
+            <div style={{ fontSize: 12, color: ARGILE.clay, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
+              Notifications bloquées dans les paramètres du navigateur.
+            </div>
+          )}
+          {notifPerm === 'default' && (
+            <button
+              onClick={requestNotifPermission}
+              style={{
+                width: '100%', padding: '10px 16px', border: `1.5px solid ${ARGILE.border}`,
+                borderRadius: 100, background: ARGILE.paper, color: ARGILE.ink2,
+                fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+                fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              Autoriser les notifications →
+            </button>
+          )}
+          <p style={{ fontSize: 11, color: ARGILE.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
+            Sur iOS, installe l'app sur l'écran d'accueil (Safari → "Sur l'écran d'accueil") pour recevoir les rappels en arrière-plan.
+          </p>
+        </div>
       </ArgileSettingsGroup>
 
       <ArgileSettingsGroup label="Cabinet médical">

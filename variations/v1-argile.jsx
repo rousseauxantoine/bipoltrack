@@ -54,6 +54,79 @@ function computeStreak(entries) {
   return streak;
 }
 
+// ── Streak v2 (dupliqué depuis lib/core.js pour usage sans import) ────
+
+const STREAK_MILESTONES = [3, 7, 14, 30, 60, 90];
+const STREAK_MILESTONE_MESSAGES = {
+  3:  "3 jours d'affilée, c'est un bon départ.",
+  7:  "Une semaine complète. Tu construis quelque chose.",
+  14: "2 semaines. Ta régularité commence à parler.",
+  30: "Un mois. Tu te connais mieux qu'avant.",
+  60: "60 jours. C'est une vraie discipline.",
+  90: "3 mois. Tes données racontent maintenant une histoire.",
+};
+
+function isEntryComplete(entry) {
+  return !!(
+    entry &&
+    (entry.humeur || entry.mood != null) &&
+    Array.isArray(entry.meds)
+  );
+}
+
+function computeStreakFull(entries, jokerUsedDate = null) {
+  const completeSet = new Set(entries.filter(isEntryComplete).map(e => e.date));
+  const isCovered = (d) => completeSet.has(d) || (jokerUsedDate != null && d === jokerUsedDate);
+  let current = 0, offset = 0;
+  while (isCovered(utcDayStr(offset))) { current++; offset++; }
+  const allDates = new Set(completeSet);
+  if (jokerUsedDate) allDates.add(jokerUsedDate);
+  const sorted = [...allDates].sort();
+  let best = current, run = 0, prevMs = null;
+  for (const d of sorted) {
+    const ms = new Date(d + 'T00:00:00Z').getTime();
+    run = prevMs === null ? 1 : ms - prevMs === MS_PER_DAY ? run + 1 : 1;
+    if (run > best) best = run;
+    prevMs = ms;
+  }
+  return { current, best };
+}
+
+function getCalendar30(entries, jokerUsedDate = null) {
+  const completeSet = new Set(entries.filter(isEntryComplete).map(e => e.date));
+  const today = utcDayStr(0);
+  return Array.from({ length: 30 }, (_, i) => {
+    const date = utcDayStr(29 - i);
+    if (date > today)                                    return { date, status: 'future' };
+    if (jokerUsedDate != null && date === jokerUsedDate) return { date, status: 'joker' };
+    if (completeSet.has(date))                           return { date, status: 'complete' };
+    return { date, status: 'missed' };
+  });
+}
+
+function getNotificationMessage(streak) {
+  if (streak === 0)  return "Un nouveau départ commence aujourd'hui.";
+  if (streak <= 6)   return `Jour ${streak} — continue sur ta lancée.`;
+  if (streak <= 29)  return `Ta série est à ${streak} jours. Ne la laisse pas s'arrêter.`;
+  return `${streak} jours consécutifs. Tu es en mode régulier.`;
+}
+
+function canActivateJoker(entries, jokerUsedDate, jokerRemaining) {
+  if (!jokerRemaining) return false;
+  const yesterday = utcDayStr(1);
+  const dayBefore = utcDayStr(2);
+  if (jokerUsedDate === yesterday) return false;
+  const completeSet = new Set(entries.filter(isEntryComplete).map(e => e.date));
+  if (completeSet.has(yesterday)) return false;
+  return completeSet.has(dayBefore) || jokerUsedDate === dayBefore;
+}
+
+function checkNewMilestone(currentStreak, milestonesReached) {
+  return STREAK_MILESTONES.find(
+    m => m === currentStreak && !milestonesReached.includes(m)
+  ) ?? null;
+}
+
 // Normalise mood : legacy 1-10 → ×10, redesign 0-100 → tel quel
 function normMoodTo100(entry) {
   const m = entry.mood;
@@ -463,10 +536,294 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
   );
 }
 
+// ── SVG Flamme ────────────────────────────────────────────────────────
+function FlameSvg({ color, done }) {
+  return (
+    <svg width="28" height="34" viewBox="0 0 28 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M14 3C14 3 5 12 5 19C5 23.9706 9.02944 28 14 28C18.9706 28 23 23.9706 23 19C23 12 14 3 14 3Z"
+        fill={color} opacity="0.88"
+      />
+      {done ? (
+        <path d="M9.5 19.5L12.5 22.5L18.5 16.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path
+          d="M14 16C14 16 10 20 10 22.5C10 24.4330 11.7909 26 14 26C16.2091 26 18 24.4330 18 22.5C18 20 14 16 14 16Z"
+          fill="rgba(255,240,220,0.45)"
+        />
+      )}
+    </svg>
+  );
+}
+
+function ShieldSvg({ color }) {
+  return (
+    <svg width="18" height="20" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M9 1L1.5 4.5V10C1.5 14.6944 4.87 18.9402 9 19.5C13.13 18.9402 16.5 14.6944 16.5 10V4.5L9 1Z" fill={color} opacity="0.88" />
+    </svg>
+  );
+}
+
+// ── Streak Widget ─────────────────────────────────────────────────────
+function ArgileStreakWidget({ onCalendar, onJokerActivated }) {
+  const [localJokerDate, setLocalJokerDate] = useStateA(null);
+  const [jokerMsg,       setJokerMsg]       = useStateA('');
+
+  const entries    = LS.getJSON('bt_entries', []);
+  const savedJoker = LS.get('bt_joker_used_date', '') || null;
+  const jokerDate  = localJokerDate ?? savedJoker;
+  const jokerLeft  = localJokerDate ? 0 : parseInt(LS.get('bt_joker_remaining', '1'), 10);
+  const today      = utcDayStr(0);
+  const todayDone  = entries.some(e => e.date === today && isEntryComplete(e));
+
+  const { current: streak } = computeStreakFull(entries, jokerDate);
+  const jokerElig  = !todayDone && canActivateJoker(entries, jokerDate, jokerLeft);
+
+  const flameColor = todayDone ? '#5A9E6F' : streak > 0 ? ARGILE.clay : ARGILE.muted;
+  const cardBg     = todayDone
+    ? 'rgba(90,158,111,0.08)'
+    : streak > 0 ? 'rgba(184,88,57,0.06)' : 'rgba(155,130,106,0.05)';
+  const cardBorder = todayDone
+    ? 'rgba(90,158,111,0.25)'
+    : streak > 0 ? ARGILE.border : ARGILE.border;
+
+  const streakLabel = streak === 0
+    ? 'Commencer une série'
+    : todayDone
+    ? `${streak} jour${streak > 1 ? 's' : ''} · série en cours`
+    : `${streak} jour${streak > 1 ? 's' : ''} · continue aujourd'hui`;
+
+  const activateJoker = () => {
+    const yesterday = utcDayStr(1);
+    LS.set('bt_joker_used_date', yesterday);
+    LS.set('bt_joker_remaining', '0');
+    setLocalJokerDate(yesterday);
+    setJokerMsg("Joker utilisé pour hier. Ton streak est préservé.");
+    if (onJokerActivated) onJokerActivated();
+  };
+
+  return (
+    <div style={{ padding: '0 24px 16px' }}>
+      <style>{`
+        @keyframes flame-bob {
+          0%, 100% { transform: scaleY(1) scaleX(1); }
+          40% { transform: scaleY(1.07) scaleX(0.96); }
+          70% { transform: scaleY(0.97) scaleX(1.02); }
+        }
+      `}</style>
+
+      <button onClick={onCalendar} style={{
+        width: '100%', padding: '14px 16px', borderRadius: 16,
+        border: `1px solid ${cardBorder}`, background: cardBg,
+        cursor: 'pointer', textAlign: 'left',
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <div style={{
+          flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: !todayDone && streak > 0 ? 'flame-bob 3s ease-in-out infinite' : 'none',
+        }}>
+          <FlameSvg color={flameColor} done={todayDone} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+            fontSize: 20, color: ARGILE.ink, lineHeight: 1,
+          }}>
+            {streak === 0 ? 'Aucune série' : `${streak} jour${streak > 1 ? 's' : ''}`}
+          </div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            letterSpacing: '0.10em', color: flameColor, marginTop: 4,
+            textTransform: 'uppercase',
+          }}>
+            {streakLabel.includes('·') ? streakLabel.split('·')[1].trim() : streakLabel}
+          </div>
+        </div>
+
+        <div style={{
+          flexShrink: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 2, opacity: jokerLeft ? 1 : 0.35,
+        }}>
+          <ShieldSvg color={jokerLeft ? '#D67A3C' : ARGILE.muted} />
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+            color: jokerLeft ? '#D67A3C' : ARGILE.muted, letterSpacing: '0.04em',
+          }}>
+            {jokerLeft}/1
+          </span>
+        </div>
+      </button>
+
+      {jokerElig && !jokerMsg && (
+        <button onClick={activateJoker} style={{
+          marginTop: 8, width: '100%', padding: '10px 16px', borderRadius: 12,
+          border: '1px solid rgba(214,122,60,0.30)',
+          background: 'rgba(214,122,60,0.06)',
+          color: '#C47028', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 14, cursor: 'pointer', textAlign: 'left', display: 'flex',
+          alignItems: 'center', gap: 8,
+        }}>
+          <ShieldSvg color="#D67A3C" />
+          <span>Activer le joker pour hier — préserver la série</span>
+        </button>
+      )}
+
+      {jokerMsg && (
+        <div style={{
+          marginTop: 8, padding: '10px 16px', borderRadius: 12,
+          background: 'rgba(214,122,60,0.07)', border: '1px solid rgba(214,122,60,0.20)',
+          fontSize: 13, color: '#C47028', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+        }}>
+          {jokerMsg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Calendrier des 30 derniers jours ─────────────────────────────────
+function ArgileStreakCalendarModal({ onClose }) {
+  const entries   = LS.getJSON('bt_entries', []);
+  const jokerDate = LS.get('bt_joker_used_date', '') || null;
+  const calendar  = getCalendar30(entries, jokerDate);
+  const { current: streak, best } = computeStreakFull(entries, jokerDate);
+
+  const STATUS_COLOR = {
+    complete: '#5A9E6F',
+    joker:    '#D67A3C',
+    missed:   ARGILE.sand2,
+    future:   'rgba(237,223,196,0.25)',
+  };
+  const STATUS_TEXT = {
+    complete: 'white',
+    joker:    'white',
+    missed:   ARGILE.ink2,
+    future:   ARGILE.border,
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 400,
+      background: 'rgba(43,24,16,0.52)',
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0',
+        padding: '16px 24px 48px', boxSizing: 'border-box',
+        maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
+
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>
+          Série
+        </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 30, color: ARGILE.ink, fontWeight: 400, margin: '0 0 4px' }}>
+          <span style={{ fontStyle: 'italic' }}>{streak} jour{streak !== 1 ? 's' : ''}</span> en cours
+        </h2>
+        {best > streak && (
+          <p style={{ fontSize: 12, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', margin: '0 0 20px', letterSpacing: '0.06em' }}>
+            MEILLEURE SÉRIE : {best} JOURS
+          </p>
+        )}
+        {best <= streak && <div style={{ marginBottom: 20 }} />}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 20 }}>
+          {calendar.map(({ date, status }) => {
+            const day = new Date(date + 'T00:00:00').getDate();
+            return (
+              <div key={date} style={{
+                aspectRatio: '1', borderRadius: 8,
+                background: STATUS_COLOR[status] ?? ARGILE.sand2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: status === 'future' ? 0.5 : 1,
+              }}>
+                <span style={{
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                  color: STATUS_TEXT[status] ?? ARGILE.ink2,
+                }}>{day}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {[
+            { color: '#5A9E6F',  label: 'Saisie complète' },
+            { color: '#D67A3C',  label: 'Joker' },
+            { color: ARGILE.sand2, label: 'Jour manqué' },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 11, height: 11, borderRadius: 3, background: color, flexShrink: 0 }} />
+              <span style={{ fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace' }}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Célébration de palier ─────────────────────────────────────────────
+function ArgileMilestoneCelebration({ milestone, onDismiss }) {
+  const msg  = STREAK_MILESTONE_MESSAGES[milestone] || '';
+  const icon = milestone >= 90 ? '🏆' : milestone >= 30 ? '🏅' : milestone >= 7 ? '🔥' : '✨';
+
+  return (
+    <div onClick={onDismiss} style={{
+      position: 'absolute', inset: 0, zIndex: 600,
+      background: 'rgba(43,24,16,0.62)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, boxSizing: 'border-box',
+    }}>
+      <style>{`
+        @keyframes milestone-pop {
+          0% { transform: scale(0.72); opacity: 0; }
+          65% { transform: scale(1.04); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .milestone-card { animation: milestone-pop 0.42s cubic-bezier(0.2,1.3,0.4,1) both; }
+      `}</style>
+      <div className="milestone-card" onClick={e => e.stopPropagation()} style={{
+        background: ARGILE.paper, borderRadius: 28, padding: '36px 28px 28px',
+        width: '100%', maxWidth: 320, textAlign: 'center',
+        border: `1px solid ${ARGILE.border}`,
+        boxShadow: '0 20px 52px rgba(43,24,16,0.28)',
+      }}>
+        <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 14 }}>{icon}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+          letterSpacing: '0.22em', color: ARGILE.clay,
+          textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          {milestone} jours
+        </div>
+        <p style={{
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 22, lineHeight: 1.38, color: ARGILE.ink, margin: '0 0 28px',
+        }}>
+          {msg}
+        </p>
+        <button onClick={onDismiss} style={{
+          width: '100%', padding: '14px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.clay, color: ARGILE.paper,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 16, cursor: 'pointer',
+        }}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ───── Journal · étape 1 — 3 états ─────
-function ArgileJournalSaisie({ onNext }) {
+function ArgileJournalSaisie({ onNext, onMilestone }) {
   const today = new Date().toISOString().slice(0, 10);
   const todayEntry = LS.getJSON('bt_entries', []).find(e => e.date === today);
+  const [showCalendar, setShowCalendar] = useStateA(false);
 
   const [humeur,  setHumeur]  = useStateA(() => {
     const idx = ARGILE_HUMEUR_OPTS.findIndex(o => o.id === todayEntry?.humeur);
@@ -501,7 +858,13 @@ function ArgileJournalSaisie({ onNext }) {
   const labelSt = { fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' };
 
   return (
-    <div style={{ padding: '0 24px' }}>
+    <>
+      <ArgileStreakWidget
+        onCalendar={() => setShowCalendar(true)}
+        onJokerActivated={onMilestone}
+      />
+
+      <div style={{ padding: '0 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
@@ -578,7 +941,10 @@ function ArgileJournalSaisie({ onNext }) {
       }}>
         Continuer — les traitements →
       </button>
-    </div>
+      </div>
+
+      {showCalendar && <ArgileStreakCalendarModal onClose={() => setShowCalendar(false)} />}
+    </>
   );
 }
 
@@ -883,8 +1249,9 @@ function ArgileDone() {
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const dateLabel = cap(now.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' }));
   const timeLabel = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
-  const entries = LS.getJSON('bt_entries', []);
-  const streak = computeStreak(entries);
+  const entries    = LS.getJSON('bt_entries', []);
+  const jokerDate  = LS.get('bt_joker_used_date', '') || null;
+  const { current: streak } = computeStreakFull(entries, jokerDate);
   const streakMsg = streak >= 2
     ? `${streak} jours d'affilée. Ta courbe se dessine.`
     : streak === 1
@@ -1078,6 +1445,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   // Brouillon du journal : accumulé à travers les 3 étapes
   const [journalDraft, setJournalDraft] = useStateA({ humeur: null, pensees: null });
   const [restoreData, setRestoreData] = useStateA(null);
+  const [pendingMilestone, setPendingMilestone] = useStateA(null);
 
   // Onboarding : popup si aucune donnée au premier lancement
   const hasNoData = LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0;
@@ -1085,6 +1453,29 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     () => LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0
   );
   const [showTutorial, setShowTutorial] = useStateA(false);
+
+  // Réinitialisation mensuelle du joker + vérification du palier au démarrage
+  useEffectA(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    if (LS.get('bt_joker_month', '') !== currentMonth) {
+      LS.set('bt_joker_remaining', '1');
+      LS.set('bt_joker_month', currentMonth);
+    }
+    checkStreakMilestone();
+  }, []);
+
+  // Vérifie si un nouveau palier de streak a été atteint
+  const checkStreakMilestone = () => {
+    const entries = LS.getJSON('bt_entries', []);
+    const jokerDate = LS.get('bt_joker_used_date', '') || null;
+    const { current } = computeStreakFull(entries, jokerDate);
+    const reached = LS.getJSON('bt_milestones_reached', []);
+    const newMilestone = checkNewMilestone(current, reached);
+    if (newMilestone != null) {
+      LS.setJSON('bt_milestones_reached', [...reached, newMilestone]);
+      setPendingMilestone(newMilestone);
+    }
+  };
 
   // Écouter les demandes de restauration (conflit de données Drive détecté)
   useEffectA(() => {
@@ -1128,10 +1519,13 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     // Signaler la modification pour la synchronisation asynchrone Google Drive
     window.dispatchEvent(new CustomEvent('bipoltrack:datachanged'));
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+
+    // Vérifier si un palier de streak est atteint après la saisie
+    setTimeout(checkStreakMilestone, 50);
   };
 
   let body;
-  if (screen === 'journal')        body = <ArgileJournalSaisie onNext={(h, p, e, note, sleep, symptoms, menstruation) => { setJournalDraft({ humeur: h, pensees: p, energie: e, note, sleep, symptoms, menstruation }); setScreen('traitements'); }} />;
+  if (screen === 'journal')        body = <ArgileJournalSaisie onNext={(h, p, e, note, sleep, symptoms, menstruation) => { setJournalDraft({ humeur: h, pensees: p, energie: e, note, sleep, symptoms, menstruation }); setScreen('traitements'); }} onMilestone={checkStreakMilestone} />;
   else if (screen === 'traitements') body = <ArgileJournalTraitements onSave={(meds) => { saveEntry({ ...journalDraft, meds }); setScreen('done'); }} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
@@ -1264,6 +1658,14 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
         <ArgileWelcome
           onNewSession={() => { setShowWelcome(false); setScreen('journal'); }}
           onImport={() => window.location.reload()}
+        />
+      )}
+
+      {/* Célébration de palier — dismissible en un tap */}
+      {pendingMilestone != null && (
+        <ArgileMilestoneCelebration
+          milestone={pendingMilestone}
+          onDismiss={() => setPendingMilestone(null)}
         />
       )}
     </div>
