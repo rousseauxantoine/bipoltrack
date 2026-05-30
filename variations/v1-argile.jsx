@@ -127,6 +127,35 @@ function checkNewMilestone(currentStreak, milestonesReached) {
   ) ?? null;
 }
 
+// ── Badges ────────────────────────────────────────────────────────────
+
+const BADGE_CATALOG = [
+  { id: 'B-R01', name: 'Premier pas',                 family: 'regularite', criterion: 'streak', threshold: 3,   icon: '🌱',  message: "3 jours. C'est comme ça que ça commence." },
+  { id: 'B-R02', name: 'Première semaine',            family: 'regularite', criterion: 'streak', threshold: 7,   icon: '🔥',  message: "Une semaine complète. Tu construis quelque chose." },
+  { id: 'B-R03', name: 'Deux semaines',               family: 'regularite', criterion: 'streak', threshold: 14,  icon: '🔥🔥', message: "14 jours. Ta régularité commence à parler." },
+  { id: 'B-R04', name: 'Un mois',                     family: 'regularite', criterion: 'streak', threshold: 30,  icon: '🏅',  message: "Un mois de données. Tu te connais mieux qu'avant." },
+  { id: 'B-R05', name: 'Deux mois',                   family: 'regularite', criterion: 'streak', threshold: 60,  icon: '🏅🏅', message: "60 jours. C'est une vraie discipline." },
+  { id: 'B-R06', name: 'Trois mois',                  family: 'regularite', criterion: 'streak', threshold: 90,  icon: '🏆',  message: "3 mois. Tes données racontent maintenant une histoire." },
+  { id: 'B-A01', name: 'Première saisie',             family: 'assiduite',  criterion: 'volume', threshold: 1,   icon: '✨',  message: "C'est parti. La première saisie est toujours la plus importante." },
+  { id: 'B-A02', name: 'Dix saisies',                 family: 'assiduite',  criterion: 'volume', threshold: 10,  icon: '📋',  message: "10 saisies enregistrées. Chacune compte." },
+  { id: 'B-A03', name: 'Cinquante saisies',           family: 'assiduite',  criterion: 'volume', threshold: 50,  icon: '📊',  message: "50 saisies. Tu as construit une vraie base de connaissance sur toi." },
+  { id: 'B-A04', name: 'Cent saisies',                family: 'assiduite',  criterion: 'volume', threshold: 100, icon: '💯',  message: "100 saisies. C'est remarquable." },
+  { id: 'B-A05', name: 'Deux cent cinquante saisies', family: 'assiduite',  criterion: 'volume', threshold: 250, icon: '⭐',  message: "250 saisies. Une discipline rare." },
+  { id: 'B-A06', name: 'Cinq cents saisies',          family: 'assiduite',  criterion: 'volume', threshold: 500, icon: '🌟',  message: "500 saisies. Tes données sont une ressource précieuse." },
+];
+
+function countCompleteEntries(entries) {
+  return new Set(entries.filter(isEntryComplete).map(e => e.date)).size;
+}
+
+function checkNewBadges(entries, streakBest, alreadyUnlockedIds) {
+  const total = countCompleteEntries(entries);
+  return BADGE_CATALOG
+    .filter(b => !alreadyUnlockedIds.includes(b.id))
+    .filter(b => b.criterion === 'streak' ? streakBest >= b.threshold : total >= b.threshold)
+    .map(b => b.id);
+}
+
 // Normalise mood : legacy 1-10 → ×10, redesign 0-100 → tel quel
 function normMoodTo100(entry) {
   const m = entry.mood;
@@ -819,6 +848,241 @@ function ArgileMilestoneCelebration({ milestone, onDismiss }) {
   );
 }
 
+// ── Célébration de badge ──────────────────────────────────────────────
+function ArgileBadgeCelebration({ badge, onDismiss }) {
+  return (
+    <div onClick={onDismiss} style={{
+      position: 'absolute', inset: 0, zIndex: 650,
+      background: 'rgba(43,24,16,0.62)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, boxSizing: 'border-box',
+    }}>
+      <div className="milestone-card" onClick={e => e.stopPropagation()} style={{
+        background: ARGILE.paper, borderRadius: 28, padding: '36px 28px 28px',
+        width: '100%', maxWidth: 320, textAlign: 'center',
+        border: `1px solid ${ARGILE.border}`,
+        boxShadow: '0 20px 52px rgba(43,24,16,0.28)',
+      }}>
+        <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 14 }}>{badge.icon}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+          letterSpacing: '0.22em', color: ARGILE.clay,
+          textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          {badge.name}
+        </div>
+        <p style={{
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 22, lineHeight: 1.38, color: ARGILE.ink, margin: '0 0 28px',
+        }}>
+          {badge.message}
+        </p>
+        <button onClick={onDismiss} style={{
+          width: '100%', padding: '14px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.clay, color: ARGILE.paper,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 16, cursor: 'pointer',
+        }}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Widget badges (accueil) ───────────────────────────────────────────
+function ArgileBadgeWidget({ onShowAll }) {
+  const badges = LS.getJSON('bt_badges', []);
+  const recent3 = [...badges]
+    .sort((a, b) => b.unlockedAt.localeCompare(a.unlockedAt))
+    .slice(0, 3);
+
+  if (badges.length === 0) {
+    return (
+      <div style={{ padding: '0 24px 16px' }}>
+        <button onClick={onShowAll} style={{
+          width: '100%', padding: '12px 16px', borderRadius: 16,
+          border: `1px solid ${ARGILE.border}`, background: 'rgba(155,130,106,0.04)',
+          cursor: 'pointer', textAlign: 'left',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{ fontSize: 22, filter: 'grayscale(1)', opacity: 0.35, flexShrink: 0 }}>🏅</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 15, color: ARGILE.muted }}>
+              Aucun badge encore
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.10em', color: ARGILE.muted, marginTop: 3, textTransform: 'uppercase' }}>
+              3 saisies pour le premier →
+            </div>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '0 24px 16px' }}>
+      <button onClick={onShowAll} style={{
+        width: '100%', padding: '14px 16px', borderRadius: 16,
+        border: `1px solid ${ARGILE.border}`, background: ARGILE.paper,
+        cursor: 'pointer', textAlign: 'left',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.18em', color: ARGILE.clay, textTransform: 'uppercase' }}>
+            Mes badges · {badges.length}
+          </span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.06em' }}>
+            Voir tous →
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {recent3.map(b => {
+            const def = BADGE_CATALOG.find(c => c.id === b.badgeId);
+            if (!def) return null;
+            return (
+              <div key={b.badgeId} style={{
+                flex: 1, padding: '8px 6px', borderRadius: 12,
+                background: ARGILE.sand, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 22, lineHeight: 1, marginBottom: 4 }}>{def.icon}</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: ARGILE.ink2, letterSpacing: '0.04em', lineHeight: 1.3 }}>
+                  {def.name}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </button>
+    </div>
+  );
+}
+
+// ── Vue complète des badges (bottom sheet) ────────────────────────────
+function ArgileBadgesModal({ onClose }) {
+  const unlockedBadges = LS.getJSON('bt_badges', []);
+  const unlockedMap    = Object.fromEntries(unlockedBadges.map(b => [b.badgeId, b]));
+
+  const entries    = LS.getJSON('bt_entries', []);
+  const jokerDate  = LS.get('bt_joker_used_date', '') || null;
+  const streakBest = computeStreakFull(entries, jokerDate).best;
+  const totalEntries = countCompleteEntries(entries);
+
+  const families = [
+    { id: 'regularite', label: 'Régularité', subtitle: 'Jours consécutifs', curVal: streakBest },
+    { id: 'assiduite',  label: 'Assiduité',  subtitle: 'Saisies cumulées',  curVal: totalEntries },
+  ];
+
+  const fmtDate = (iso) =>
+    new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 400,
+      background: 'rgba(43,24,16,0.52)',
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0',
+        padding: '16px 24px 48px', boxSizing: 'border-box',
+        maxHeight: '82vh', overflowY: 'auto', overscrollBehavior: 'contain',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
+
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>
+          Badges
+        </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 30, color: ARGILE.ink, fontWeight: 400, margin: '0 0 24px' }}>
+          <span style={{ fontStyle: 'italic' }}>
+            {unlockedBadges.length} obtenu{unlockedBadges.length !== 1 ? 's' : ''}
+          </span>
+        </h2>
+
+        {families.map(fam => {
+          const famBadges = BADGE_CATALOG.filter(b => b.family === fam.id);
+          const nextBadge = famBadges.find(b => !unlockedMap[b.id]);
+          const progressPct = nextBadge
+            ? Math.min(100, Math.round((fam.curVal / nextBadge.threshold) * 100))
+            : 100;
+
+          return (
+            <div key={fam.id} style={{ marginBottom: 28 }}>
+              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 20, color: ARGILE.ink }}>
+                  {fam.label}
+                </span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.10em', textTransform: 'uppercase' }}>
+                  {fam.subtitle}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {famBadges.map(badge => {
+                  const unlocked = unlockedMap[badge.id];
+                  const remaining = badge.criterion === 'streak'
+                    ? badge.threshold - streakBest
+                    : badge.threshold - totalEntries;
+                  return (
+                    <div key={badge.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                      borderRadius: 14, background: ARGILE.paper,
+                      border: `1px solid ${ARGILE.border}`,
+                      opacity: unlocked ? 1 : 0.6,
+                    }}>
+                      <div style={{
+                        fontSize: 28, lineHeight: 1, flexShrink: 0,
+                        filter: unlocked ? 'none' : 'grayscale(1)',
+                        opacity: unlocked ? 1 : 0.45,
+                      }}>
+                        {badge.icon}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+                          fontSize: 16, color: unlocked ? ARGILE.ink : ARGILE.muted, lineHeight: 1.2,
+                        }}>
+                          {badge.name}
+                        </div>
+                        <div style={{
+                          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+                          color: unlocked ? ARGILE.clay : ARGILE.muted,
+                          letterSpacing: '0.06em', marginTop: 3, textTransform: 'uppercase',
+                        }}>
+                          {unlocked
+                            ? `Obtenu le ${fmtDate(unlocked.unlockedAt)}`
+                            : remaining > 0
+                              ? `Encore ${remaining} ${badge.criterion === 'streak' ? `jour${remaining > 1 ? 's' : ''}` : `saisie${remaining > 1 ? 's' : ''}`}`
+                              : 'À débloquer'
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {nextBadge && (
+                <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(43,24,16,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.06em' }}>
+                      {fam.curVal} / {nextBadge.threshold}
+                    </span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.06em' }}>
+                      Prochain : {nextBadge.name}
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: ARGILE.sand2, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: progressPct + '%', height: '100%', background: ARGILE.clay, borderRadius: 2 }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ───── Journal · étape 1 — 3 états ─────
 function ArgileJournalSaisie({ onNext, onMilestone }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -844,6 +1108,7 @@ function ArgileJournalSaisie({ onNext, onMilestone }) {
 
   const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
   const alreadyFilled = !!todayEntry;
+  const [showBadges, setShowBadges] = useStateA(false);
 
   const tog = (setter) => (id) =>
     setter(arr => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
@@ -863,6 +1128,7 @@ function ArgileJournalSaisie({ onNext, onMilestone }) {
         onCalendar={() => setShowCalendar(true)}
         onJokerActivated={onMilestone}
       />
+      <ArgileBadgeWidget onShowAll={() => setShowBadges(true)} />
 
       <div style={{ padding: '0 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -944,6 +1210,7 @@ function ArgileJournalSaisie({ onNext, onMilestone }) {
       </div>
 
       {showCalendar && <ArgileStreakCalendarModal onClose={() => setShowCalendar(false)} />}
+      {showBadges   && <ArgileBadgesModal         onClose={() => setShowBadges(false)} />}
     </>
   );
 }
@@ -1446,6 +1713,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   const [journalDraft, setJournalDraft] = useStateA({ humeur: null, pensees: null });
   const [restoreData, setRestoreData] = useStateA(null);
   const [pendingMilestone, setPendingMilestone] = useStateA(null);
+  const [pendingBadges, setPendingBadges] = useStateA([]);
 
   // Onboarding : popup si aucune donnée au premier lancement
   const hasNoData = LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0;
@@ -1454,7 +1722,7 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   );
   const [showTutorial, setShowTutorial] = useStateA(false);
 
-  // Réinitialisation mensuelle du joker + vérification du palier au démarrage
+  // Réinitialisation mensuelle du joker + vérification des paliers et badges au démarrage
   useEffectA(() => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     if (LS.get('bt_joker_month', '') !== currentMonth) {
@@ -1462,11 +1730,16 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
       LS.set('bt_joker_month', currentMonth);
     }
     checkStreakMilestone();
+    // Récupérer les badges non célébrés (ex. saisis hors ligne)
+    const uncelebrated = LS.getJSON('bt_badges', [])
+      .filter(b => !b.celebrated)
+      .map(b => b.badgeId);
+    if (uncelebrated.length > 0) setPendingBadges(uncelebrated);
   }, []);
 
   // Vérifie si un nouveau palier de streak a été atteint
   const checkStreakMilestone = () => {
-    const entries = LS.getJSON('bt_entries', []);
+    const entries   = LS.getJSON('bt_entries', []);
     const jokerDate = LS.get('bt_joker_used_date', '') || null;
     const { current } = computeStreakFull(entries, jokerDate);
     const reached = LS.getJSON('bt_milestones_reached', []);
@@ -1475,6 +1748,31 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
       LS.setJSON('bt_milestones_reached', [...reached, newMilestone]);
       setPendingMilestone(newMilestone);
     }
+  };
+
+  // Vérifie et attribue les nouveaux badges
+  const checkBadgesUnlocked = () => {
+    const entries    = LS.getJSON('bt_entries', []);
+    const jokerDate  = LS.get('bt_joker_used_date', '') || null;
+    const { best }   = computeStreakFull(entries, jokerDate);
+    const existing   = LS.getJSON('bt_badges', []);
+    const unlockedIds = existing.map(b => b.badgeId);
+    const newIds     = checkNewBadges(entries, best, unlockedIds);
+    if (newIds.length === 0) return;
+    const now = new Date().toISOString();
+    const updated = [
+      ...existing,
+      ...newIds.map(id => ({ badgeId: id, unlockedAt: now, celebrated: false })),
+    ];
+    LS.setJSON('bt_badges', updated);
+    setPendingBadges(prev => [...prev, ...newIds.filter(id => !prev.includes(id))]);
+  };
+
+  const dismissBadgeCelebration = () => {
+    const [first, ...rest] = pendingBadges;
+    const badges = LS.getJSON('bt_badges', []);
+    LS.setJSON('bt_badges', badges.map(b => b.badgeId === first ? { ...b, celebrated: true } : b));
+    setPendingBadges(rest);
   };
 
   // Écouter les demandes de restauration (conflit de données Drive détecté)
@@ -1520,8 +1818,8 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     window.dispatchEvent(new CustomEvent('bipoltrack:datachanged'));
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
 
-    // Vérifier si un palier de streak est atteint après la saisie
-    setTimeout(checkStreakMilestone, 50);
+    // Vérifier paliers de streak et badges après la saisie
+    setTimeout(() => { checkStreakMilestone(); checkBadgesUnlocked(); }, 50);
   };
 
   let body;
@@ -1668,6 +1966,14 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
           onDismiss={() => setPendingMilestone(null)}
         />
       )}
+
+      {/* Célébration de badge — s'affiche après le palier de streak */}
+      {pendingMilestone == null && pendingBadges.length > 0 && (() => {
+        const badge = BADGE_CATALOG.find(b => b.id === pendingBadges[0]);
+        return badge ? (
+          <ArgileBadgeCelebration badge={badge} onDismiss={dismissBadgeCelebration} />
+        ) : null;
+      })()}
     </div>
   );
 }
