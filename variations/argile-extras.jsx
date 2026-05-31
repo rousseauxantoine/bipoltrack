@@ -869,20 +869,25 @@ function ArgileStatsDeep() {
       <div style={{ background: ARGILE.paper, padding: '20px 14px 16px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', flex: 1 }}>Humeur & cycle</span>
-          {cycleSettings && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              {[1, 2].map(n => (
-                <button key={n} onClick={() => setCycleNumCycles(n)} style={{
-                  padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', fontSize: 11,
-                  background: cycleNumCycles === n ? ARGILE.ink : ARGILE.sand2,
-                  color: cycleNumCycles === n ? ARGILE.paper : ARGILE.ink,
-                  fontFamily: 'DM Sans, sans-serif',
-                }}>
-                  {n === 1 ? '1c' : '2c'}
-                </button>
-              ))}
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {cycleSettings && [1, 2].map(n => (
+              <button key={n} onClick={() => setCycleNumCycles(n)} style={{
+                padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', fontSize: 11,
+                background: cycleNumCycles === n ? ARGILE.ink : ARGILE.sand2,
+                color: cycleNumCycles === n ? ARGILE.paper : ARGILE.ink,
+                fontFamily: 'DM Sans, sans-serif',
+              }}>
+                {n === 1 ? '1c' : '2c'}
+              </button>
+            ))}
+            <button onClick={() => window.__argileSetScreen && window.__argileSetScreen('cycle')} style={{
+              padding: '3px 10px', borderRadius: 100, cursor: 'pointer', fontSize: 11,
+              border: `1px solid ${ARGILE.border}`, background: 'transparent',
+              color: ARGILE.muted, fontFamily: 'DM Sans, sans-serif',
+            }}>
+              ⚙ Modifier
+            </button>
+          </div>
         </div>
         <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 14 }}>
           Corrélation cycle.
@@ -3119,6 +3124,16 @@ function ArgileCycle() {
 
       {showSetup ? (
         <div>
+          {settings && (
+            <button onClick={() => setShowSetup(false)} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: ARGILE.muted, fontSize: 13, padding: '0 0 18px',
+              fontFamily: 'DM Sans, sans-serif',
+            }}>
+              ← Annuler
+            </button>
+          )}
           <p style={{ fontSize: 14, color: ARGILE.ink2, lineHeight: 1.6, marginBottom: 22 }}>
             Renseigne tes informations de cycle pour visualiser la corrélation avec ton humeur.
           </p>
@@ -3151,7 +3166,7 @@ function ArgileCycle() {
             fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
             fontSize: 18, cursor: 'pointer',
           }}>
-            Afficher le graphique →
+            {settings ? 'Enregistrer les modifications' : 'Afficher le graphique →'}
           </button>
         </div>
       ) : (
