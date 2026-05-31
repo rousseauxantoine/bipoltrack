@@ -2830,13 +2830,16 @@ function _buildCycleCells(entries, settings, startDate, endDate) {
 function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
   const [hovIdx, setHovIdx]   = useStateAx(null);
   const [touchLock, setTouch] = useStateAx(null);
+  const [offset, setOffset]   = useStateAx(0);  // nb de cycles de décalage depuis lastPeriodStart
 
   const L  = cycleSettings?.avgCycleLength ?? 28;
   const lp = cycleSettings?.lastPeriodStart;
 
-  const startDate = lp ?? new Date().toISOString().slice(0, 10);
-  const endMs   = new Date(startDate + 'T00:00:00Z').getTime() + numCycles * L * 86400000 - 86400000;
-  const endDate = new Date(endMs).toISOString().slice(0, 10);
+  const baseMs    = lp ? new Date(lp + 'T00:00:00Z').getTime() : new Date().setUTCHours(0,0,0,0);
+  const startMs_w = baseMs + offset * L * 86400000;
+  const startDate = new Date(startMs_w).toISOString().slice(0, 10);
+  const endMs     = startMs_w + numCycles * L * 86400000 - 86400000;
+  const endDate   = new Date(endMs).toISOString().slice(0, 10);
 
   const cells = _buildCycleCells(entries, cycleSettings, startDate, endDate);
   const conf  = _cycleConf(cycleSettings);
@@ -2866,8 +2869,31 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
   const activeIdx = touchLock ?? hovIdx;
   const hovCell   = activeIdx != null ? cells[activeIdx] : null;
 
+  const navBtnStyle = {
+    background: 'none', border: `1px solid ${ARGILE.border}`, borderRadius: 100,
+    width: 28, height: 28, cursor: 'pointer', fontSize: 14, lineHeight: '26px',
+    color: ARGILE.muted, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  };
+
   return (
-    <div style={{ position: 'relative', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
+    <div>
+      {/* Barre de navigation temporelle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <button style={navBtnStyle} onClick={() => setOffset(o => o - 1)} aria-label="Période précédente">‹</button>
+        <span style={{
+          flex: 1, textAlign: 'center', fontSize: 11,
+          color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace',
+          letterSpacing: '0.05em',
+        }}>
+          {fmtShort(startDate)} — {fmtShort(endDate)}
+        </span>
+        <button style={{ ...navBtnStyle, opacity: offset >= 0 ? 0.3 : 1 }}
+          onClick={() => setOffset(o => Math.min(0, o + 1))}
+          aria-label="Période suivante">›</button>
+      </div>
+
+      <div style={{ position: 'relative', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
       <svg
         width={totalW}
         height={SVG_H}
@@ -3062,6 +3088,7 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
           )}
         </div>
       )}
+      </div>
 
       {conf === 'low' && (
         <p style={{
