@@ -304,6 +304,37 @@ describe('buildMoodCycleCells', () => {
     });
   });
 
+  describe('menstruation field', () => {
+    it('copies entry.menstruation into the cell', () => {
+      const entries = [{ date: '2026-01-03', humeur: 'tristesse', menstruation: ['regles'] }];
+      const cells = buildMoodCycleCells(entries, BASE_SETTINGS, '2026-01-01', '2026-01-05');
+      expect(cells[2].menstruation).toEqual(['regles']);
+    });
+
+    it('defaults to empty array when no menstruation field', () => {
+      const entries = [{ date: '2026-01-01', humeur: 'sérénité' }];
+      const cells = buildMoodCycleCells(entries, BASE_SETTINGS, '2026-01-01', '2026-01-01');
+      expect(cells[0].menstruation).toEqual([]);
+    });
+
+    it('defaults to empty array for days with no entry', () => {
+      const cells = buildMoodCycleCells([], BASE_SETTINGS, '2026-01-01', '2026-01-01');
+      expect(cells[0].menstruation).toEqual([]);
+    });
+
+    it('supports ovulation entry', () => {
+      const entries = [{ date: '2026-01-14', humeur: 'sérénité', menstruation: ['ovulation'] }];
+      const cells = buildMoodCycleCells(entries, BASE_SETTINGS, '2026-01-14', '2026-01-14');
+      expect(cells[0].menstruation).toEqual(['ovulation']);
+    });
+
+    it('supports combined regles + ovulation', () => {
+      const entries = [{ date: '2026-01-01', humeur: 'tristesse', menstruation: ['regles', 'ovulation'] }];
+      const cells = buildMoodCycleCells(entries, BASE_SETTINGS, '2026-01-01', '2026-01-01');
+      expect(cells[0].menstruation).toEqual(['regles', 'ovulation']);
+    });
+  });
+
   it('handles 30-day cycle correctly', () => {
     const settings = { ...BASE_SETTINGS, avgCycleLength: 30 };
     const cells = buildMoodCycleCells([], settings, '2026-01-01', '2026-01-31');

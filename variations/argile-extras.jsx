@@ -2819,7 +2819,8 @@ function _buildCycleCells(entries, settings, startDate, endDate) {
       cycleDay = _computeCycleDay(date, lp, L);
       phase    = _phaseOf(cycleDay, L, D);
     }
-    cells.push({ date, moodLevel, cycleDay, phase, isPredicted: true, confidence });
+    const menstruation = entry?.menstruation ?? [];
+    cells.push({ date, moodLevel, cycleDay, phase, isPredicted: true, confidence, menstruation });
   }
   return cells;
 }
@@ -2890,25 +2891,30 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
         <line x1={PAD_L} y1={MED_Y} x2={PAD_L + cells.length * COL_W} y2={MED_Y}
           stroke="#E3D8C5" strokeWidth={1} strokeDasharray="2 4" />
 
-        {/* Event pictograms — droplet for règles, ring for ovulation */}
-        {conf !== 'none' && cells.map((cell, i) => {
-          const cx  = PAD_L + i * COL_W + COL_W / 2;
-          const opc = cell.confidence === 'low' ? 0.4 : 0.85;
-          if (cell.phase === 'regles') return (
-            <path key={cell.date + '-ev'}
-              d="M0,-5 C-3.5,-1 -3.5,2 0,5 C3.5,2 3.5,-1 0,-5"
-              transform={`translate(${cx},${EVENT_CY})`}
-              fill="#C0473F" opacity={opc}
-            />
-          );
-          if (cell.phase === 'ovul') return (
-            <g key={cell.date + '-ev'} opacity={opc}>
-              <circle cx={cx} cy={EVENT_CY} r={4.5}
-                fill="none" stroke="#D4A23A" strokeWidth={1.5} />
-              <circle cx={cx} cy={EVENT_CY} r={1.8} fill="#D4A23A" />
+        {/* Event pictograms — données enregistrées uniquement (entry.menstruation) */}
+        {cells.map((cell, i) => {
+          const cx     = PAD_L + i * COL_W + COL_W / 2;
+          const hasR   = cell.menstruation.includes('regles');
+          const hasOv  = cell.menstruation.includes('ovulation');
+          if (!hasR && !hasOv) return null;
+          return (
+            <g key={cell.date + '-ev'}>
+              {hasR && (
+                <path
+                  d="M0,-5 C-3.5,-1 -3.5,2 0,5 C3.5,2 3.5,-1 0,-5"
+                  transform={`translate(${cx},${EVENT_CY})`}
+                  fill="#C0473F"
+                />
+              )}
+              {hasOv && (
+                <g>
+                  <circle cx={cx} cy={EVENT_CY} r={4.5}
+                    fill="none" stroke="#D4A23A" strokeWidth={1.5} />
+                  <circle cx={cx} cy={EVENT_CY} r={1.8} fill="#D4A23A" />
+                </g>
+              )}
             </g>
           );
-          return null;
         })}
 
         {/* Cycle phase band */}
