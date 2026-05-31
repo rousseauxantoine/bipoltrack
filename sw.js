@@ -1,5 +1,11 @@
-const CACHE_NAME = 'bipoltrack-v4';
-const ASSETS = ['./index.html', './manifest.json'];
+const CACHE_NAME = 'bipoltrack-v5';
+const ASSETS = [
+  './index.html',
+  './manifest.json',
+  './tweaks-panel.jsx',
+  './variations/v1-argile.jsx?v=202605310001',
+  './variations/argile-extras.jsx?v=202605310001',
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));

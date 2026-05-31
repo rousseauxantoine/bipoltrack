@@ -1784,6 +1784,11 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     return () => window.removeEventListener('bipoltrack:restore-required', handleRestoreReq);
   }, []);
 
+  useEffectA(() => {
+    window.__argileSetScreen = setScreen;
+    return () => { window.__argileSetScreen = null; };
+  }, [setScreen]);
+
   // Apply tweaks override to palette/density (mutates window.ARGILE_LIVE for screens to read)
   const pal = tweaks.palette || 'argile';
   const dens = tweaks.density || 'aere';
