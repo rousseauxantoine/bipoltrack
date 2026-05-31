@@ -2787,7 +2787,6 @@ function _phaseOf(cycleDay, L = 28, D = 5) {
 function _cycleConf(settings) {
   if (!settings?.isCycleTrackingEnabled || !settings?.lastPeriodStart) return 'none';
   const logged = settings.cyclesLogged ?? 0;
-  if (logged === 0) return 'none';
   if (logged <= 2)  return 'low';
   if ((settings.cycleLengthStdDev ?? 0) > 4) return 'low';
   return 'high';

@@ -1,10 +1,10 @@
-const CACHE_NAME = 'bipoltrack-v5';
+const CACHE_NAME = 'bipoltrack-v6';
 const ASSETS = [
   './index.html',
   './manifest.json',
   './tweaks-panel.jsx',
-  './variations/v1-argile.jsx?v=202605310001',
-  './variations/argile-extras.jsx?v=202605310001',
+  './variations/v1-argile.jsx?v=202605310002',
+  './variations/argile-extras.jsx?v=202605310002',
 ];
 
 self.addEventListener('install', e => {

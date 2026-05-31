@@ -149,10 +149,10 @@ describe('cycleConfidence', () => {
   it('returns none when lastPeriodStart is missing', () => {
     expect(cycleConfidence({ isCycleTrackingEnabled: true, cyclesLogged: 3 })).toBe('none');
   });
-  it('returns none when 0 cycles logged', () => {
+  it('returns low when 0 cycles logged (lastPeriodStart set → estimation possible)', () => {
     expect(cycleConfidence({
       isCycleTrackingEnabled: true, cyclesLogged: 0, lastPeriodStart: '2026-01-01',
-    })).toBe('none');
+    })).toBe('low');
   });
   it('returns low when 1 cycle logged', () => {
     expect(cycleConfidence({
