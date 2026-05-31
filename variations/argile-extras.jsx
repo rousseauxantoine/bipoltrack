@@ -2766,6 +2766,8 @@ const _CYCLE_PHASES = [
 const _CYCLE_PHASE_MAP = Object.fromEntries(_CYCLE_PHASES.map(p => [p.id, p]));
 const _MOOD_BAR_H  = { 1: 26, 2: 46, 3: 68 };
 const _MOOD_LABELS = { 1: 'Petite', 2: 'Moyenne', 3: 'Grande' };
+// Tristesse → #9B7A7A, Sérénité → #AE9F8C, Euphorie → #B85839 (mirrors ARGILE_HUMEUR_OPTS)
+const _MOOD_COLORS = { 1: '#9B7A7A', 2: '#AE9F8C', 3: '#B85839' };
 
 // Duplicated pure helpers from lib/core.js (globally scoped JSX cannot import)
 function _cycleMoodLevel(entry) {
@@ -2904,7 +2906,7 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
           const h    = _MOOD_BAR_H[cell.moodLevel];
           const barX = PAD_L + i * COL_W + (COL_W - BAR_W) / 2;
           const barY = MED_Y - h / 2;
-          const fill = cell.phase ? _CYCLE_PHASE_MAP[cell.phase].color : '#9B826A';
+          const fill = _MOOD_COLORS[cell.moodLevel];
           return (
             <rect key={cell.date + '-bar'}
               x={barX} y={barY}
@@ -3026,7 +3028,7 @@ function MoodCycleLegend() {
       {[1, 2, 3].map(lv => (
         <div key={'ml' + lv} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width={8} height={_MOOD_BAR_H[lv]} style={{ flexShrink: 0 }}>
-            <rect x={0} y={0} width={8} height={_MOOD_BAR_H[lv]} rx={2} fill="#9B826A" />
+            <rect x={0} y={0} width={8} height={_MOOD_BAR_H[lv]} rx={2} fill={_MOOD_COLORS[lv]} />
           </svg>
           <span style={{ fontSize: 11, color: '#5C4733' }}>{_MOOD_LABELS[lv]}</span>
         </div>
