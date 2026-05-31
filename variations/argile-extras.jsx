@@ -870,14 +870,14 @@ function ArgileStatsDeep() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', flex: 1 }}>Humeur & cycle</span>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {cycleSettings && [1, 2].map(n => (
+            {cycleSettings && [1, 2, 3].map(n => (
               <button key={n} onClick={() => setCycleNumCycles(n)} style={{
                 padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', fontSize: 11,
                 background: cycleNumCycles === n ? ARGILE.ink : ARGILE.sand2,
                 color: cycleNumCycles === n ? ARGILE.paper : ARGILE.ink,
                 fontFamily: 'DM Sans, sans-serif',
               }}>
-                {n === 1 ? '1c' : '2c'}
+                {n}c
               </button>
             ))}
             <button onClick={() => window.__argileSetScreen && window.__argileSetScreen('cycle')} style={{
@@ -2851,10 +2851,17 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
   const EVENT_CY  = EVENT_TOP + EVENT_H / 2;
   const CYCLE_TOP = EVENT_TOP + EVENT_H + 6;
   const CYCLE_H   = 26;
-  const AXIS_Y    = CYCLE_TOP + CYCLE_H + 14;
-  const SVG_H     = AXIS_Y + 14;
+  const AXIS_Y    = CYCLE_TOP + CYCLE_H + 10;  // J-day labels
+  const FRISE_Y   = AXIS_Y + 14;               // frise chronologique (dates réelles)
+  const SVG_H     = FRISE_Y + 14;
   const PAD_L     = 4;
   const totalW    = PAD_L + cells.length * COL_W + 4;
+
+  const _months   = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  const fmtShort  = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    return `${d.getDate()} ${_months[d.getMonth()]}`;
+  };
 
   const activeIdx = touchLock ?? hovIdx;
   const hovCell   = activeIdx != null ? cells[activeIdx] : null;
@@ -2960,6 +2967,24 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
               fontFamily="JetBrains Mono, monospace"
             >
               J{cell.cycleDay}
+            </text>
+          );
+        })}
+
+        {/* Frise chronologique — dates calendaire réelles */}
+        <line x1={PAD_L} y1={FRISE_Y - 3} x2={PAD_L + cells.length * COL_W} y2={FRISE_Y - 3}
+          stroke="#E3D8C5" strokeWidth={0.5} />
+        {cells.map((cell, i) => {
+          if (!cell.cycleDay) return null;
+          if (cell.cycleDay !== 1 && cell.cycleDay % 7 !== 0) return null;
+          return (
+            <text key={cell.date + '-fr'}
+              x={PAD_L + i * COL_W + COL_W / 2} y={FRISE_Y + 10}
+              textAnchor="middle"
+              fill="#C39265" fontSize={8}
+              fontFamily="DM Sans, sans-serif"
+            >
+              {fmtShort(cell.date)}
             </text>
           );
         })}
@@ -3205,7 +3230,7 @@ function ArgileCycle() {
         <div>
           {/* Controls */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
-            {[1, 2].map(n => (
+            {[1, 2, 3].map(n => (
               <button key={n} onClick={() => setNumCycles(n)} style={{
                 padding: '6px 16px', borderRadius: 100, border: 'none',
                 cursor: 'pointer', fontSize: 13,
@@ -3213,7 +3238,7 @@ function ArgileCycle() {
                 color: numCycles === n ? ARGILE.paper : ARGILE.ink,
                 fontFamily: 'DM Sans, sans-serif',
               }}>
-                {n === 1 ? '1 cycle' : '2 cycles'}
+                {n === 1 ? '1 cycle' : `${n} cycles`}
               </button>
             ))}
             <button onClick={() => setShowSetup(true)} style={{
