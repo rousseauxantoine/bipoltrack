@@ -2845,7 +2845,10 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
   const BAR_W     = 9;
   const MOOD_H    = 120;
   const MED_Y     = 60;
-  const CYCLE_TOP = MOOD_H + 10;
+  const EVENT_TOP = MOOD_H + 8;            // ligne d'événements (pictogrammes)
+  const EVENT_H   = 14;
+  const EVENT_CY  = EVENT_TOP + EVENT_H / 2;
+  const CYCLE_TOP = EVENT_TOP + EVENT_H + 6;
   const CYCLE_H   = 26;
   const AXIS_Y    = CYCLE_TOP + CYCLE_H + 14;
   const SVG_H     = AXIS_Y + 14;
@@ -2886,6 +2889,27 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
         {/* Median dotted line */}
         <line x1={PAD_L} y1={MED_Y} x2={PAD_L + cells.length * COL_W} y2={MED_Y}
           stroke="#E3D8C5" strokeWidth={1} strokeDasharray="2 4" />
+
+        {/* Event pictograms — droplet for règles, ring for ovulation */}
+        {conf !== 'none' && cells.map((cell, i) => {
+          const cx  = PAD_L + i * COL_W + COL_W / 2;
+          const opc = cell.confidence === 'low' ? 0.4 : 0.85;
+          if (cell.phase === 'regles') return (
+            <path key={cell.date + '-ev'}
+              d="M0,-5 C-3.5,-1 -3.5,2 0,5 C3.5,2 3.5,-1 0,-5"
+              transform={`translate(${cx},${EVENT_CY})`}
+              fill="#C0473F" opacity={opc}
+            />
+          );
+          if (cell.phase === 'ovul') return (
+            <g key={cell.date + '-ev'} opacity={opc}>
+              <circle cx={cx} cy={EVENT_CY} r={4.5}
+                fill="none" stroke="#D4A23A" strokeWidth={1.5} />
+              <circle cx={cx} cy={EVENT_CY} r={1.8} fill="#D4A23A" />
+            </g>
+          );
+          return null;
+        })}
 
         {/* Cycle phase band */}
         {conf !== 'none' && cells.map((cell, i) => {
@@ -2939,7 +2963,7 @@ function MoodCycleChart({ entries = [], cycleSettings = null, numCycles = 2 }) {
           <rect
             x={PAD_L + activeIdx * COL_W} y={14}
             width={COL_W} height={CYCLE_TOP + CYCLE_H - 14}
-            fill="rgba(43,24,16,0.06)" rx={2}
+            fill="rgba(43,24,16,0.05)" rx={2}
             style={{ pointerEvents: 'none' }}
           />
         )}
