@@ -599,6 +599,19 @@ function ArgileStatsDeep() {
   const [editDate,          setEditDate]          = useStateAx(null);
   const [phaseAlgoRefresh,  setPhaseAlgoRefresh]  = useStateAx(0);
   const [phaseAlgo,         setPhaseAlgo]         = useStateAx(LS.get('bt_phase_algo') || '21j');
+  const [cycleNumCycles,    setCycleNumCycles]    = useStateAx(2);
+
+  const cycleSettings = useMemoAx(() => {
+    const lp = LS.get('bt_cycle_last_period', '');
+    if (!lp) return null;
+    return {
+      isCycleTrackingEnabled: true,
+      lastPeriodStart:  lp,
+      avgCycleLength:   parseInt(LS.get('bt_cycle_length',        '28'), 10) || 28,
+      avgPeriodLength:  parseInt(LS.get('bt_cycle_period_length', '5'),  10) || 5,
+      cyclesLogged:     parseInt(LS.get('bt_cycle_logged',         '0'),  10) || 0,
+    };
+  }, [refreshKey]);
 
   const handlePhaseAlgoChange = (v) => {
     setPhaseAlgo(v);
@@ -850,6 +863,55 @@ function ArgileStatsDeep() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Humeur × Cycle ── */}
+      <div style={{ background: ARGILE.paper, padding: '20px 14px 16px', borderRadius: 18, border: `1px solid ${ARGILE.border}`, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', flex: 1 }}>Humeur & cycle</span>
+          {cycleSettings && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[1, 2].map(n => (
+                <button key={n} onClick={() => setCycleNumCycles(n)} style={{
+                  padding: '3px 10px', borderRadius: 100, border: 'none', cursor: 'pointer', fontSize: 11,
+                  background: cycleNumCycles === n ? ARGILE.ink : ARGILE.sand2,
+                  color: cycleNumCycles === n ? ARGILE.paper : ARGILE.ink,
+                  fontFamily: 'DM Sans, sans-serif',
+                }}>
+                  {n === 1 ? '1c' : '2c'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 22, color: ARGILE.ink, fontStyle: 'italic', marginBottom: 14 }}>
+          Corrélation cycle.
+        </div>
+        {cycleSettings ? (
+          <>
+            <MoodCycleChart entries={allEntries} cycleSettings={cycleSettings} numCycles={cycleNumCycles} />
+            <MoodCycleLegend />
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '16px 0 8px' }}>
+            <p style={{ fontSize: 13, color: ARGILE.muted, lineHeight: 1.55, margin: '0 0 14px', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic' }}>
+              Configure le suivi de cycle pour visualiser la corrélation avec ton humeur.
+            </p>
+            <button
+              onClick={() => {
+                if (window.__argileSetScreen) window.__argileSetScreen('cycle');
+              }}
+              style={{
+                padding: '8px 20px', borderRadius: 100,
+                border: `1.5px solid ${ARGILE.clay}`, background: 'transparent',
+                color: ARGILE.clay, fontSize: 13, cursor: 'pointer',
+                fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+              }}
+            >
+              Configurer →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Calendrier annuel (données réelles + simulation) ── */}
