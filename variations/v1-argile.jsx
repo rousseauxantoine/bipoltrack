@@ -7,10 +7,10 @@ const { useState: useStateA, useRef: useRefA, useEffect: useEffectA } = React;
 const APP_VERSION = '1.0.1';
 
 const ARGILE = {
-  sand:    '#EDDFC4',
-  sand2:   '#E2D0AE',
-  cream:   '#F8F0DC',
-  paper:   '#FBF6EB',
+  sand:    '#FFFFFF',
+  sand2:   '#EEEEEE',
+  cream:   '#F5F5F5',
+  paper:   '#F8F8F8',
   clay:    '#B85839',
   clayDk:  '#8B3E26',
   ink:     '#2B1810',
@@ -408,7 +408,7 @@ function ArgileShell({ children, active, onNav, hideHeader = false, hasNoData = 
       {/* bottom nav */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, paddingBottom: 24,
-        background: `linear-gradient(180deg, rgba(237,223,196,0) 0%, ${ARGILE.sand} 35%)`,
+        background: `linear-gradient(180deg, rgba(255,255,255,0) 0%, ${ARGILE.sand} 35%)`,
         display: 'flex', justifyContent: 'center', alignItems: 'flex-end', zIndex: 10,
       }}>
         <div style={{
@@ -722,7 +722,7 @@ function ArgileStreakCalendarModal({ onClose }) {
     complete: '#5A9E6F',
     joker:    '#D67A3C',
     missed:   ARGILE.sand2,
-    future:   'rgba(237,223,196,0.25)',
+    future:   'rgba(0,0,0,0.04)',
   };
   const STATUS_TEXT = {
     complete: 'white',
