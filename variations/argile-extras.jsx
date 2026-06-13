@@ -1314,11 +1314,13 @@ function ArgileMeds() {
         </div>
       )}
 
-      <button style={{
-        width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
-        background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
-        fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
-      }}>
+      <button
+        onClick={() => window.__argileSetScreen && window.__argileSetScreen('report')}
+        style={{
+          width: '100%', padding: '16px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
+          fontStyle: 'italic', fontSize: 18, cursor: 'pointer',
+        }}>
         Préparer un rapport pour le médecin →
       </button>
     </div>
