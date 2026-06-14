@@ -23,7 +23,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// ── moodPhaseArgile ───────────────────────────────────────────────────
+// ── moodPhaseArgile (tri-zone, issue #60) ─────────────────────────────
 
 describe('moodPhaseArgile', () => {
   it('returns null for null mood', () => {
@@ -31,26 +31,35 @@ describe('moodPhaseArgile', () => {
     expect(moodPhaseArgile(undefined)).toBeNull();
   });
 
-  it('returns "down" for mood < 40', () => {
-    expect(moodPhaseArgile(0)).toBe('down');
-    expect(moodPhaseArgile(20)).toBe('down');
-    expect(moodPhaseArgile(39)).toBe('down');
+  it('returns "bas" for mood < 40', () => {
+    expect(moodPhaseArgile(0)).toBe('bas');
+    expect(moodPhaseArgile(20)).toBe('bas');
+    expect(moodPhaseArgile(39)).toBe('bas');
   });
 
-  it('returns null for stable zone 40–59 (not a phase trigger)', () => {
-    expect(moodPhaseArgile(40)).toBeNull();
-    expect(moodPhaseArgile(50)).toBeNull();
-    expect(moodPhaseArgile(59)).toBeNull();
+  it('returns "stable" for mood in 40–59 (counted, not null)', () => {
+    expect(moodPhaseArgile(40)).toBe('stable');
+    expect(moodPhaseArgile(50)).toBe('stable');
+    expect(moodPhaseArgile(59)).toBe('stable');
   });
 
-  it('returns "up" for mood ≥ 60', () => {
-    expect(moodPhaseArgile(60)).toBe('up');
-    expect(moodPhaseArgile(80)).toBe('up');
-    expect(moodPhaseArgile(100)).toBe('up');
+  it('returns "haut" for mood ≥ 60', () => {
+    expect(moodPhaseArgile(60)).toBe('haut');
+    expect(moodPhaseArgile(80)).toBe('haut');
+    expect(moodPhaseArgile(100)).toBe('haut');
+  });
+
+  it('exact boundary: 39 → bas, 40 → stable, 59 → stable, 60 → haut', () => {
+    expect(moodPhaseArgile(39)).toBe('bas');
+    expect(moodPhaseArgile(40)).toBe('stable');
+    expect(moodPhaseArgile(59)).toBe('stable');
+    expect(moodPhaseArgile(60)).toBe('haut');
   });
 });
 
 // ── computePhaseProjectionsArgile ────────────────────────────────────
+// Note: the projection engine uses an internal bi-zone model ('up'/'down') and
+// is independent of the tri-zone moodPhaseArgile (to be refactored in P2, issue #60 §9).
 
 describe('computePhaseProjectionsArgile', () => {
   it('returns empty result for empty entries', () => {
