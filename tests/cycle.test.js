@@ -24,6 +24,8 @@ describe('cycle segmentation constants', () => {
   it('PERIOD_MAX is 10', () => expect(PERIOD_MAX).toBe(10));
 });
 
+// ── CYCLE_PHASES & MOOD_BAR_HEIGHTS ──────────────────────────────────
+
 describe('CYCLE_PHASES', () => {
   it('defines 4 phases with id, label and color', () => {
     expect(CYCLE_PHASES).toHaveLength(4);
@@ -651,6 +653,7 @@ describe('computeCycleDay (deprecated)', () => {
     expect(computeCycleDay('2026-01-29', '2026-01-01', 28)).toBe(1);
   });
   it('wraps correctly across multiple cycles', () => {
+    // 2 full 28-day cycles = 56 days → day 57 is day 1 of cycle 3
     expect(computeCycleDay('2026-02-26', '2026-01-01', 28)).toBe(1);
   });
   it('handles a custom 30-day cycle', () => {
@@ -658,6 +661,7 @@ describe('computeCycleDay (deprecated)', () => {
     expect(computeCycleDay('2026-01-31', '2026-01-01', 30)).toBe(1);
   });
   it('handles dates before lastPeriodStart with correct wrap', () => {
+    // 3 days before start → should map to day 26 of the previous 28-day cycle
     expect(computeCycleDay('2025-12-29', '2026-01-01', 28)).toBe(26);
   });
   it('returns correct value for 21-day cycle', () => {
@@ -666,18 +670,40 @@ describe('computeCycleDay (deprecated)', () => {
   });
 });
 
+// ── phaseOf ───────────────────────────────────────────────────────────
+
+// Default params: L=28, D=5 → ovulationDay=14, period=days1-5
+
 describe('phaseOf (deprecated)', () => {
   it('returns regles for day 1', () => expect(phaseOf(1)).toBe('regles'));
+  it('returns regles for day 3', () => expect(phaseOf(3)).toBe('regles'));
   it('returns regles for day 5 (last period day)', () => expect(phaseOf(5)).toBe('regles'));
-  it('returns follic for day 6', () => expect(phaseOf(6)).toBe('follic'));
+  it('returns follic for day 6 (day after period ends)', () => expect(phaseOf(6)).toBe('follic'));
+  it('returns follic for day 13', () => expect(phaseOf(13)).toBe('follic'));
   it('returns ovul for day 14 (L-14)', () => expect(phaseOf(14)).toBe('ovul'));
   it('returns luteal for day 15', () => expect(phaseOf(15)).toBe('luteal'));
+  it('returns luteal for day 28', () => expect(phaseOf(28)).toBe('luteal'));
+
+  it('handles period length of 7', () => {
+    expect(phaseOf(7, 28, 7)).toBe('regles');
+    expect(phaseOf(8, 28, 7)).toBe('follic');
+  });
+
+  it('handles 30-day cycle (ovulation at day 16)', () => {
+    expect(phaseOf(15, 30, 5)).toBe('follic');
+    expect(phaseOf(16, 30, 5)).toBe('ovul');
+    expect(phaseOf(17, 30, 5)).toBe('luteal');
+    expect(phaseOf(30, 30, 5)).toBe('luteal');
+  });
+
   it('handles 21-day cycle (ovulation at day 7)', () => {
     expect(phaseOf(6, 21, 5)).toBe('follic');
     expect(phaseOf(7, 21, 5)).toBe('ovul');
     expect(phaseOf(8, 21, 5)).toBe('luteal');
   });
 });
+
+// ── cycleConfidence ───────────────────────────────────────────────────
 
 describe('cycleConfidence (deprecated)', () => {
   it('returns none when cycleSettings is null', () => {
@@ -691,9 +717,14 @@ describe('cycleConfidence (deprecated)', () => {
   it('returns none when lastPeriodStart is missing', () => {
     expect(cycleConfidence({ isCycleTrackingEnabled: true, cyclesLogged: 3 })).toBe('none');
   });
-  it('returns low when 0 cycles logged', () => {
+  it('returns low when 0 cycles logged (lastPeriodStart set → estimation possible)', () => {
     expect(cycleConfidence({
       isCycleTrackingEnabled: true, cyclesLogged: 0, lastPeriodStart: '2026-01-01',
+    })).toBe('low');
+  });
+  it('returns low when 1 cycle logged', () => {
+    expect(cycleConfidence({
+      isCycleTrackingEnabled: true, cyclesLogged: 1, lastPeriodStart: '2026-01-01',
     })).toBe('low');
   });
   it('returns low when 2 cycles logged', () => {
@@ -717,5 +748,11 @@ describe('cycleConfidence (deprecated)', () => {
       isCycleTrackingEnabled: true, cyclesLogged: 10, lastPeriodStart: '2026-01-01',
       cycleLengthStdDev: 4.1,
     })).toBe('low');
+  });
+  it('returns high with large stdDev below threshold', () => {
+    expect(cycleConfidence({
+      isCycleTrackingEnabled: true, cyclesLogged: 4, lastPeriodStart: '2026-01-01',
+      cycleLengthStdDev: 3.9,
+    })).toBe('high');
   });
 });

@@ -7,10 +7,10 @@ const { useState: useStateA, useRef: useRefA, useEffect: useEffectA } = React;
 const APP_VERSION = '1.0.1';
 
 const ARGILE = {
-  sand:    '#EDDFC4',
-  sand2:   '#E2D0AE',
-  cream:   '#F8F0DC',
-  paper:   '#FBF6EB',
+  sand:    '#FFFFFF',
+  sand2:   '#EEEEEE',
+  cream:   '#F5F5F5',
+  paper:   '#F8F8F8',
   clay:    '#B85839',
   clayDk:  '#8B3E26',
   ink:     '#2B1810',
@@ -52,6 +52,108 @@ function computeStreak(entries) {
     offset++;
   }
   return streak;
+}
+
+// ── Streak v2 (dupliqué depuis lib/core.js pour usage sans import) ────
+
+const STREAK_MILESTONES = [3, 7, 14, 30, 60, 90];
+const STREAK_MILESTONE_MESSAGES = {
+  3:  "3 jours d'affilée, c'est un bon départ.",
+  7:  "Une semaine complète. Tu construis quelque chose.",
+  14: "2 semaines. Ta régularité commence à parler.",
+  30: "Un mois. Tu te connais mieux qu'avant.",
+  60: "60 jours. C'est une vraie discipline.",
+  90: "3 mois. Tes données racontent maintenant une histoire.",
+};
+
+function isEntryComplete(entry) {
+  return !!(
+    entry &&
+    (entry.humeur || entry.mood != null) &&
+    Array.isArray(entry.meds)
+  );
+}
+
+function computeStreakFull(entries, jokerUsedDate = null) {
+  const completeSet = new Set(entries.filter(isEntryComplete).map(e => e.date));
+  const isCovered = (d) => completeSet.has(d) || (jokerUsedDate != null && d === jokerUsedDate);
+  let current = 0, offset = 0;
+  while (isCovered(utcDayStr(offset))) { current++; offset++; }
+  const allDates = new Set(completeSet);
+  if (jokerUsedDate) allDates.add(jokerUsedDate);
+  const sorted = [...allDates].sort();
+  let best = current, run = 0, prevMs = null;
+  for (const d of sorted) {
+    const ms = new Date(d + 'T00:00:00Z').getTime();
+    run = prevMs === null ? 1 : ms - prevMs === MS_PER_DAY ? run + 1 : 1;
+    if (run > best) best = run;
+    prevMs = ms;
+  }
+  return { current, best };
+}
+
+function getCalendar30(entries, jokerUsedDate = null) {
+  const completeSet = new Set(entries.filter(isEntryComplete).map(e => e.date));
+  const today = utcDayStr(0);
+  return Array.from({ length: 30 }, (_, i) => {
+    const date = utcDayStr(29 - i);
+    if (date > today)                                    return { date, status: 'future' };
+    if (jokerUsedDate != null && date === jokerUsedDate) return { date, status: 'joker' };
+    if (completeSet.has(date))                           return { date, status: 'complete' };
+    return { date, status: 'missed' };
+  });
+}
+
+function getNotificationMessage(streak) {
+  if (streak === 0)  return "Un nouveau départ commence aujourd'hui.";
+  if (streak <= 6)   return `Jour ${streak} — continue sur ta lancée.`;
+  if (streak <= 29)  return `Ta série est à ${streak} jours. Ne la laisse pas s'arrêter.`;
+  return `${streak} jours consécutifs. Tu es en mode régulier.`;
+}
+
+function canActivateJoker(entries, jokerUsedDate, jokerRemaining) {
+  if (!jokerRemaining) return false;
+  const yesterday = utcDayStr(1);
+  const dayBefore = utcDayStr(2);
+  if (jokerUsedDate === yesterday) return false;
+  const completeSet = new Set(entries.filter(isEntryComplete).map(e => e.date));
+  if (completeSet.has(yesterday)) return false;
+  return completeSet.has(dayBefore) || jokerUsedDate === dayBefore;
+}
+
+function checkNewMilestone(currentStreak, milestonesReached) {
+  return STREAK_MILESTONES.find(
+    m => m === currentStreak && !milestonesReached.includes(m)
+  ) ?? null;
+}
+
+// ── Badges ────────────────────────────────────────────────────────────
+
+const BADGE_CATALOG = [
+  { id: 'B-R01', name: 'Premier pas',                 family: 'regularite', criterion: 'streak', threshold: 3,   icon: '🌱',  message: "3 jours. C'est comme ça que ça commence." },
+  { id: 'B-R02', name: 'Première semaine',            family: 'regularite', criterion: 'streak', threshold: 7,   icon: '🔥',  message: "Une semaine complète. Tu construis quelque chose." },
+  { id: 'B-R03', name: 'Deux semaines',               family: 'regularite', criterion: 'streak', threshold: 14,  icon: '🔥🔥', message: "14 jours. Ta régularité commence à parler." },
+  { id: 'B-R04', name: 'Un mois',                     family: 'regularite', criterion: 'streak', threshold: 30,  icon: '🏅',  message: "Un mois de données. Tu te connais mieux qu'avant." },
+  { id: 'B-R05', name: 'Deux mois',                   family: 'regularite', criterion: 'streak', threshold: 60,  icon: '🏅🏅', message: "60 jours. C'est une vraie discipline." },
+  { id: 'B-R06', name: 'Trois mois',                  family: 'regularite', criterion: 'streak', threshold: 90,  icon: '🏆',  message: "3 mois. Tes données racontent maintenant une histoire." },
+  { id: 'B-A01', name: 'Première saisie',             family: 'assiduite',  criterion: 'volume', threshold: 1,   icon: '✨',  message: "C'est parti. La première saisie est toujours la plus importante." },
+  { id: 'B-A02', name: 'Dix saisies',                 family: 'assiduite',  criterion: 'volume', threshold: 10,  icon: '📋',  message: "10 saisies enregistrées. Chacune compte." },
+  { id: 'B-A03', name: 'Cinquante saisies',           family: 'assiduite',  criterion: 'volume', threshold: 50,  icon: '📊',  message: "50 saisies. Tu as construit une vraie base de connaissance sur toi." },
+  { id: 'B-A04', name: 'Cent saisies',                family: 'assiduite',  criterion: 'volume', threshold: 100, icon: '💯',  message: "100 saisies. C'est remarquable." },
+  { id: 'B-A05', name: 'Deux cent cinquante saisies', family: 'assiduite',  criterion: 'volume', threshold: 250, icon: '⭐',  message: "250 saisies. Une discipline rare." },
+  { id: 'B-A06', name: 'Cinq cents saisies',          family: 'assiduite',  criterion: 'volume', threshold: 500, icon: '🌟',  message: "500 saisies. Tes données sont une ressource précieuse." },
+];
+
+function countCompleteEntries(entries) {
+  return new Set(entries.filter(isEntryComplete).map(e => e.date)).size;
+}
+
+function checkNewBadges(entries, streakBest, alreadyUnlockedIds) {
+  const total = countCompleteEntries(entries);
+  return BADGE_CATALOG
+    .filter(b => !alreadyUnlockedIds.includes(b.id))
+    .filter(b => b.criterion === 'streak' ? streakBest >= b.threshold : total >= b.threshold)
+    .map(b => b.id);
 }
 
 // Normalise mood : legacy 1-10 → ×10, redesign 0-100 → tel quel
@@ -306,7 +408,7 @@ function ArgileShell({ children, active, onNav, hideHeader = false, hasNoData = 
       {/* bottom nav */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, paddingBottom: 24,
-        background: `linear-gradient(180deg, rgba(237,223,196,0) 0%, ${ARGILE.sand} 35%)`,
+        background: `linear-gradient(180deg, rgba(255,255,255,0) 0%, ${ARGILE.sand} 35%)`,
         display: 'flex', justifyContent: 'center', alignItems: 'flex-end', zIndex: 10,
       }}>
         <div style={{
@@ -463,21 +565,579 @@ function ArgileSnapSlider({ dimLabel, opts, value, onChange, mascots }) {
   );
 }
 
-// ───── Journal · étape 1 — 3 états ─────
-function ArgileJournalSaisie({ onNext }) {
-  const [humeur,  setHumeur]  = useStateA(1);
-  const [pensees, setPensees] = useStateA(1);
-  const [energie, setEnergie] = useStateA(1);
-  const [note, setNote] = useStateA('');
+// ── SVG Flamme ────────────────────────────────────────────────────────
+function FlameSvg({ color, done }) {
+  return (
+    <svg width="28" height="34" viewBox="0 0 28 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M14 3C14 3 5 12 5 19C5 23.9706 9.02944 28 14 28C18.9706 28 23 23.9706 23 19C23 12 14 3 14 3Z"
+        fill={color} opacity="0.88"
+      />
+      {done ? (
+        <path d="M9.5 19.5L12.5 22.5L18.5 16.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path
+          d="M14 16C14 16 10 20 10 22.5C10 24.4330 11.7909 26 14 26C16.2091 26 18 24.4330 18 22.5C18 20 14 16 14 16Z"
+          fill="rgba(255,240,220,0.45)"
+        />
+      )}
+    </svg>
+  );
+}
 
-  const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
+function ShieldSvg({ color }) {
+  return (
+    <svg width="18" height="20" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M9 1L1.5 4.5V10C1.5 14.6944 4.87 18.9402 9 19.5C13.13 18.9402 16.5 14.6944 16.5 10V4.5L9 1Z" fill={color} opacity="0.88" />
+    </svg>
+  );
+}
+
+// ── Streak Widget ─────────────────────────────────────────────────────
+function ArgileStreakWidget({ onCalendar, onJokerActivated }) {
+  const [localJokerDate, setLocalJokerDate] = useStateA(null);
+  const [jokerMsg,       setJokerMsg]       = useStateA('');
+
+  const entries    = LS.getJSON('bt_entries', []);
+  const savedJoker = LS.get('bt_joker_used_date', '') || null;
+  const jokerDate  = localJokerDate ?? savedJoker;
+  const jokerLeft  = localJokerDate ? 0 : parseInt(LS.get('bt_joker_remaining', '1'), 10);
+  const today      = utcDayStr(0);
+  const todayDone  = entries.some(e => e.date === today && isEntryComplete(e));
+
+  const { current: streak } = computeStreakFull(entries, jokerDate);
+  const jokerElig  = !todayDone && canActivateJoker(entries, jokerDate, jokerLeft);
+
+  const flameColor = todayDone ? '#5A9E6F' : streak > 0 ? ARGILE.clay : ARGILE.muted;
+  const cardBg     = todayDone
+    ? 'rgba(90,158,111,0.08)'
+    : streak > 0 ? 'rgba(184,88,57,0.06)' : 'rgba(155,130,106,0.05)';
+  const cardBorder = todayDone
+    ? 'rgba(90,158,111,0.25)'
+    : streak > 0 ? ARGILE.border : ARGILE.border;
+
+  const streakLabel = streak === 0
+    ? 'Commencer une série'
+    : todayDone
+    ? `${streak} jour${streak > 1 ? 's' : ''} · série en cours`
+    : `${streak} jour${streak > 1 ? 's' : ''} · continue aujourd'hui`;
+
+  const activateJoker = () => {
+    const yesterday = utcDayStr(1);
+    LS.set('bt_joker_used_date', yesterday);
+    LS.set('bt_joker_remaining', '0');
+    setLocalJokerDate(yesterday);
+    setJokerMsg("Joker utilisé pour hier. Ton streak est préservé.");
+    if (onJokerActivated) onJokerActivated();
+  };
 
   return (
-    <div style={{ padding: '0 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
-          {todayLabel}
+    <div style={{ padding: '0 24px 16px' }}>
+      <style>{`
+        @keyframes flame-bob {
+          0%, 100% { transform: scaleY(1) scaleX(1); }
+          40% { transform: scaleY(1.07) scaleX(0.96); }
+          70% { transform: scaleY(0.97) scaleX(1.02); }
+        }
+      `}</style>
+
+      <button onClick={onCalendar} style={{
+        width: '100%', padding: '14px 16px', borderRadius: 16,
+        border: `1px solid ${cardBorder}`, background: cardBg,
+        cursor: 'pointer', textAlign: 'left',
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <div style={{
+          flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: !todayDone && streak > 0 ? 'flame-bob 3s ease-in-out infinite' : 'none',
+        }}>
+          <FlameSvg color={flameColor} done={todayDone} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+            fontSize: 20, color: ARGILE.ink, lineHeight: 1,
+          }}>
+            {streak === 0 ? 'Aucune série' : `${streak} jour${streak > 1 ? 's' : ''}`}
+          </div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            letterSpacing: '0.10em', color: flameColor, marginTop: 4,
+            textTransform: 'uppercase',
+          }}>
+            {streakLabel.includes('·') ? streakLabel.split('·')[1].trim() : streakLabel}
+          </div>
+        </div>
+
+        <div style={{
+          flexShrink: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 2, opacity: jokerLeft ? 1 : 0.35,
+        }}>
+          <ShieldSvg color={jokerLeft ? '#D67A3C' : ARGILE.muted} />
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+            color: jokerLeft ? '#D67A3C' : ARGILE.muted, letterSpacing: '0.04em',
+          }}>
+            {jokerLeft}/1
+          </span>
+        </div>
+      </button>
+
+      {jokerElig && !jokerMsg && (
+        <button onClick={activateJoker} style={{
+          marginTop: 8, width: '100%', padding: '10px 16px', borderRadius: 12,
+          border: '1px solid rgba(214,122,60,0.30)',
+          background: 'rgba(214,122,60,0.06)',
+          color: '#C47028', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 14, cursor: 'pointer', textAlign: 'left', display: 'flex',
+          alignItems: 'center', gap: 8,
+        }}>
+          <ShieldSvg color="#D67A3C" />
+          <span>Activer le joker pour hier — préserver la série</span>
+        </button>
+      )}
+
+      {jokerMsg && (
+        <div style={{
+          marginTop: 8, padding: '10px 16px', borderRadius: 12,
+          background: 'rgba(214,122,60,0.07)', border: '1px solid rgba(214,122,60,0.20)',
+          fontSize: 13, color: '#C47028', fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+        }}>
+          {jokerMsg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Calendrier des 30 derniers jours ─────────────────────────────────
+function ArgileStreakCalendarModal({ onClose }) {
+  const entries   = LS.getJSON('bt_entries', []);
+  const jokerDate = LS.get('bt_joker_used_date', '') || null;
+  const calendar  = getCalendar30(entries, jokerDate);
+  const { current: streak, best } = computeStreakFull(entries, jokerDate);
+
+  const STATUS_COLOR = {
+    complete: '#5A9E6F',
+    joker:    '#D67A3C',
+    missed:   ARGILE.sand2,
+    future:   'rgba(0,0,0,0.04)',
+  };
+  const STATUS_TEXT = {
+    complete: 'white',
+    joker:    'white',
+    missed:   ARGILE.ink2,
+    future:   ARGILE.border,
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 400,
+      background: 'rgba(43,24,16,0.52)',
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0',
+        padding: '16px 24px 48px', boxSizing: 'border-box',
+        maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
+
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>
+          Série
         </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 30, color: ARGILE.ink, fontWeight: 400, margin: '0 0 4px' }}>
+          <span style={{ fontStyle: 'italic' }}>{streak} jour{streak !== 1 ? 's' : ''}</span> en cours
+        </h2>
+        {best > streak && (
+          <p style={{ fontSize: 12, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', margin: '0 0 20px', letterSpacing: '0.06em' }}>
+            MEILLEURE SÉRIE : {best} JOURS
+          </p>
+        )}
+        {best <= streak && <div style={{ marginBottom: 20 }} />}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 20 }}>
+          {calendar.map(({ date, status }) => {
+            const day = new Date(date + 'T00:00:00').getDate();
+            return (
+              <div key={date} style={{
+                aspectRatio: '1', borderRadius: 8,
+                background: STATUS_COLOR[status] ?? ARGILE.sand2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: status === 'future' ? 0.5 : 1,
+              }}>
+                <span style={{
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                  color: STATUS_TEXT[status] ?? ARGILE.ink2,
+                }}>{day}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {[
+            { color: '#5A9E6F',  label: 'Saisie complète' },
+            { color: '#D67A3C',  label: 'Joker' },
+            { color: ARGILE.sand2, label: 'Jour manqué' },
+          ].map(({ color, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 11, height: 11, borderRadius: 3, background: color, flexShrink: 0 }} />
+              <span style={{ fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace' }}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Célébration de palier ─────────────────────────────────────────────
+function ArgileMilestoneCelebration({ milestone, onDismiss }) {
+  const msg  = STREAK_MILESTONE_MESSAGES[milestone] || '';
+  const icon = milestone >= 90 ? '🏆' : milestone >= 30 ? '🏅' : milestone >= 7 ? '🔥' : '✨';
+
+  return (
+    <div onClick={onDismiss} style={{
+      position: 'absolute', inset: 0, zIndex: 600,
+      background: 'rgba(43,24,16,0.62)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, boxSizing: 'border-box',
+    }}>
+      <style>{`
+        @keyframes milestone-pop {
+          0% { transform: scale(0.72); opacity: 0; }
+          65% { transform: scale(1.04); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .milestone-card { animation: milestone-pop 0.42s cubic-bezier(0.2,1.3,0.4,1) both; }
+      `}</style>
+      <div className="milestone-card" onClick={e => e.stopPropagation()} style={{
+        background: ARGILE.paper, borderRadius: 28, padding: '36px 28px 28px',
+        width: '100%', maxWidth: 320, textAlign: 'center',
+        border: `1px solid ${ARGILE.border}`,
+        boxShadow: '0 20px 52px rgba(43,24,16,0.28)',
+      }}>
+        <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 14 }}>{icon}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+          letterSpacing: '0.22em', color: ARGILE.clay,
+          textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          {milestone} jours
+        </div>
+        <p style={{
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 22, lineHeight: 1.38, color: ARGILE.ink, margin: '0 0 28px',
+        }}>
+          {msg}
+        </p>
+        <button onClick={onDismiss} style={{
+          width: '100%', padding: '14px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.clay, color: ARGILE.paper,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 16, cursor: 'pointer',
+        }}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Célébration de badge ──────────────────────────────────────────────
+function ArgileBadgeCelebration({ badge, onDismiss }) {
+  return (
+    <div onClick={onDismiss} style={{
+      position: 'absolute', inset: 0, zIndex: 650,
+      background: 'rgba(43,24,16,0.62)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, boxSizing: 'border-box',
+    }}>
+      <div className="milestone-card" onClick={e => e.stopPropagation()} style={{
+        background: ARGILE.paper, borderRadius: 28, padding: '36px 28px 28px',
+        width: '100%', maxWidth: 320, textAlign: 'center',
+        border: `1px solid ${ARGILE.border}`,
+        boxShadow: '0 20px 52px rgba(43,24,16,0.28)',
+      }}>
+        <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 14 }}>{badge.icon}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+          letterSpacing: '0.22em', color: ARGILE.clay,
+          textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          {badge.name}
+        </div>
+        <p style={{
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 22, lineHeight: 1.38, color: ARGILE.ink, margin: '0 0 28px',
+        }}>
+          {badge.message}
+        </p>
+        <button onClick={onDismiss} style={{
+          width: '100%', padding: '14px 20px', border: 'none', borderRadius: 100,
+          background: ARGILE.clay, color: ARGILE.paper,
+          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+          fontSize: 16, cursor: 'pointer',
+        }}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Widget badges (accueil) ───────────────────────────────────────────
+function ArgileBadgeWidget({ onShowAll }) {
+  const badges = LS.getJSON('bt_badges', []);
+  const recent3 = [...badges]
+    .sort((a, b) => b.unlockedAt.localeCompare(a.unlockedAt))
+    .slice(0, 3);
+
+  if (badges.length === 0) {
+    return (
+      <div style={{ padding: '0 24px 16px' }}>
+        <button onClick={onShowAll} style={{
+          width: '100%', padding: '12px 16px', borderRadius: 16,
+          border: `1px solid ${ARGILE.border}`, background: 'rgba(155,130,106,0.04)',
+          cursor: 'pointer', textAlign: 'left',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{ fontSize: 22, filter: 'grayscale(1)', opacity: 0.35, flexShrink: 0 }}>🏅</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 15, color: ARGILE.muted }}>
+              Aucun badge encore
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.10em', color: ARGILE.muted, marginTop: 3, textTransform: 'uppercase' }}>
+              3 saisies pour le premier →
+            </div>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '0 24px 16px' }}>
+      <button onClick={onShowAll} style={{
+        width: '100%', padding: '14px 16px', borderRadius: 16,
+        border: `1px solid ${ARGILE.border}`, background: ARGILE.paper,
+        cursor: 'pointer', textAlign: 'left',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, letterSpacing: '0.18em', color: ARGILE.clay, textTransform: 'uppercase' }}>
+            Mes badges · {badges.length}
+          </span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.06em' }}>
+            Voir tous →
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {recent3.map(b => {
+            const def = BADGE_CATALOG.find(c => c.id === b.badgeId);
+            if (!def) return null;
+            return (
+              <div key={b.badgeId} style={{
+                flex: 1, padding: '8px 6px', borderRadius: 12,
+                background: ARGILE.sand, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 22, lineHeight: 1, marginBottom: 4 }}>{def.icon}</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 8, color: ARGILE.ink2, letterSpacing: '0.04em', lineHeight: 1.3 }}>
+                  {def.name}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </button>
+    </div>
+  );
+}
+
+// ── Vue complète des badges (bottom sheet) ────────────────────────────
+function ArgileBadgesModal({ onClose }) {
+  const unlockedBadges = LS.getJSON('bt_badges', []);
+  const unlockedMap    = Object.fromEntries(unlockedBadges.map(b => [b.badgeId, b]));
+
+  const entries    = LS.getJSON('bt_entries', []);
+  const jokerDate  = LS.get('bt_joker_used_date', '') || null;
+  const streakBest = computeStreakFull(entries, jokerDate).best;
+  const totalEntries = countCompleteEntries(entries);
+
+  const families = [
+    { id: 'regularite', label: 'Régularité', subtitle: 'Jours consécutifs', curVal: streakBest },
+    { id: 'assiduite',  label: 'Assiduité',  subtitle: 'Saisies cumulées',  curVal: totalEntries },
+  ];
+
+  const fmtDate = (iso) =>
+    new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 400,
+      background: 'rgba(43,24,16,0.52)',
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', background: ARGILE.sand, borderRadius: '20px 20px 0 0',
+        padding: '16px 24px 48px', boxSizing: 'border-box',
+        maxHeight: '82vh', overflowY: 'auto', overscrollBehavior: 'contain',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: ARGILE.border, margin: '0 auto 20px' }} />
+
+        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.20em', color: ARGILE.clay, textTransform: 'uppercase', margin: '0 0 4px' }}>
+          Badges
+        </p>
+        <h2 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 30, color: ARGILE.ink, fontWeight: 400, margin: '0 0 24px' }}>
+          <span style={{ fontStyle: 'italic' }}>
+            {unlockedBadges.length} obtenu{unlockedBadges.length !== 1 ? 's' : ''}
+          </span>
+        </h2>
+
+        {families.map(fam => {
+          const famBadges = BADGE_CATALOG.filter(b => b.family === fam.id);
+          const nextBadge = famBadges.find(b => !unlockedMap[b.id]);
+          const progressPct = nextBadge
+            ? Math.min(100, Math.round((fam.curVal / nextBadge.threshold) * 100))
+            : 100;
+
+          return (
+            <div key={fam.id} style={{ marginBottom: 28 }}>
+              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 20, color: ARGILE.ink }}>
+                  {fam.label}
+                </span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.10em', textTransform: 'uppercase' }}>
+                  {fam.subtitle}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {famBadges.map(badge => {
+                  const unlocked = unlockedMap[badge.id];
+                  const remaining = badge.criterion === 'streak'
+                    ? badge.threshold - streakBest
+                    : badge.threshold - totalEntries;
+                  return (
+                    <div key={badge.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                      borderRadius: 14, background: ARGILE.paper,
+                      border: `1px solid ${ARGILE.border}`,
+                      opacity: unlocked ? 1 : 0.6,
+                    }}>
+                      <div style={{
+                        fontSize: 28, lineHeight: 1, flexShrink: 0,
+                        filter: unlocked ? 'none' : 'grayscale(1)',
+                        opacity: unlocked ? 1 : 0.45,
+                      }}>
+                        {badge.icon}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontFamily: 'Instrument Serif, serif', fontStyle: 'italic',
+                          fontSize: 16, color: unlocked ? ARGILE.ink : ARGILE.muted, lineHeight: 1.2,
+                        }}>
+                          {badge.name}
+                        </div>
+                        <div style={{
+                          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+                          color: unlocked ? ARGILE.clay : ARGILE.muted,
+                          letterSpacing: '0.06em', marginTop: 3, textTransform: 'uppercase',
+                        }}>
+                          {unlocked
+                            ? `Obtenu le ${fmtDate(unlocked.unlockedAt)}`
+                            : remaining > 0
+                              ? `Encore ${remaining} ${badge.criterion === 'streak' ? `jour${remaining > 1 ? 's' : ''}` : `saisie${remaining > 1 ? 's' : ''}`}`
+                              : 'À débloquer'
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {nextBadge && (
+                <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(43,24,16,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.06em' }}>
+                      {fam.curVal} / {nextBadge.threshold}
+                    </span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: ARGILE.muted, letterSpacing: '0.06em' }}>
+                      Prochain : {nextBadge.name}
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: ARGILE.sand2, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: progressPct + '%', height: '100%', background: ARGILE.clay, borderRadius: 2 }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ───── Journal · étape 1 — 3 états ─────
+function ArgileJournalSaisie({ onNext, onMilestone }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayEntry = LS.getJSON('bt_entries', []).find(e => e.date === today);
+  const [showCalendar, setShowCalendar] = useStateA(false);
+
+  const [humeur,  setHumeur]  = useStateA(() => {
+    const idx = ARGILE_HUMEUR_OPTS.findIndex(o => o.id === todayEntry?.humeur);
+    return idx >= 0 ? idx : 1;
+  });
+  const [pensees, setPensees] = useStateA(() => {
+    const idx = ARGILE_PENSEES_OPTS.findIndex(o => o.id === todayEntry?.pensees);
+    return idx >= 0 ? idx : 1;
+  });
+  const [energie, setEnergie] = useStateA(() => {
+    const idx = ARGILE_ENERGIE_OPTS.findIndex(o => o.id === todayEntry?.energie);
+    return idx >= 0 ? idx : 1;
+  });
+  const [sleep,        setSleep]        = useStateA(() => todayEntry?.sleep        ?? 7);
+  const [symptoms,     setSymptoms]     = useStateA(() => todayEntry?.symptoms     || []);
+  const [menstruation, setMenstruation] = useStateA(() => todayEntry?.menstruation || []);
+  const [note,         setNote]         = useStateA(() => todayEntry?.note         || '');
+
+  const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const alreadyFilled = !!todayEntry;
+  const [showBadges, setShowBadges] = useStateA(false);
+
+  const tog = (setter) => (id) =>
+    setter(arr => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+
+  const inputSt = { width: '100%', accentColor: ARGILE.clay };
+  const chipSt  = (on) => ({
+    padding: '6px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+    border: `1.5px solid ${on ? ARGILE.clay : ARGILE.border}`,
+    background: on ? 'rgba(184,88,57,0.10)' : 'transparent',
+    color: on ? ARGILE.clay : ARGILE.ink2,
+  });
+  const labelSt = { fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.14em', color: ARGILE.muted, textTransform: 'uppercase', margin: '0 0 6px' };
+
+  return (
+    <>
+      <ArgileStreakWidget
+        onCalendar={() => setShowCalendar(true)}
+        onJokerActivated={onMilestone}
+      />
+      <ArgileBadgeWidget onShowAll={() => setShowBadges(true)} />
+
+      <div style={{ padding: '0 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '0.18em', color: ARGILE.muted, textTransform: 'uppercase', margin: 0 }}>
+            {todayLabel}
+          </p>
+          {alreadyFilled && <span style={{ color: '#5A9E6F', fontSize: 13, lineHeight: 1 }}>✓</span>}
+        </div>
         <div style={{ display: 'flex', gap: 4 }}>
           {[0, 1].map(i => <div key={i} style={{ width: 24, height: 3, borderRadius: 2, background: i === 0 ? ARGILE.clay : ARGILE.border }} />)}
         </div>
@@ -486,6 +1146,40 @@ function ArgileJournalSaisie({ onNext }) {
       <ArgileSnapSlider dimLabel="01 — l'humeur" opts={ARGILE_HUMEUR_OPTS} value={humeur} onChange={setHumeur} mascots={['assets/mascotte-sombre.png', 'assets/mascotte-stable.png', 'assets/mascotte-brulant.png']} />
       <ArgileSnapSlider dimLabel="02 — les pensées" opts={ARGILE_PENSEES_OPTS} value={pensees} onChange={setPensees} />
       <ArgileSnapSlider dimLabel="03 — l'énergie"   opts={ARGILE_ENERGIE_OPTS} value={energie} onChange={setEnergie} />
+
+      {/* Sommeil */}
+      <div style={{ marginBottom: 20 }}>
+        <p style={labelSt}>Sommeil · {sleep}h</p>
+        <input type="range" min="0" max="12" step="0.5" value={sleep}
+          onChange={e => setSleep(+e.target.value)} style={inputSt} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: ARGILE.muted, fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+          <span>0h</span><span>6h</span><span>12h</span>
+        </div>
+      </div>
+
+      {/* Symptômes */}
+      <div style={{ marginBottom: 20 }}>
+        <p style={{ ...labelSt, margin: '0 0 10px' }}>Symptômes</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ARGILE_SYMPTOMS.map(s => (
+            <button key={s.id} onClick={() => tog(setSymptoms)(s.id)} style={chipSt(symptoms.includes(s.id))}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Cycle */}
+      <div style={{ marginBottom: 20 }}>
+        <p style={{ ...labelSt, margin: '0 0 10px' }}>Cycle</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {ARGILE_MENSTRUATION.map(m => (
+            <button key={m.id} onClick={() => tog(setMenstruation)(m.id)} style={chipSt(menstruation.includes(m.id))}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div style={{ marginBottom: 8 }}>
         <span style={{ fontFamily: 'Instrument Serif, serif', fontSize: 20, color: ARGILE.ink, fontStyle: 'italic' }}>Une note ?</span>
@@ -502,7 +1196,10 @@ function ArgileJournalSaisie({ onNext }) {
         ARGILE_HUMEUR_OPTS[humeur].id,
         ARGILE_PENSEES_OPTS[pensees].id,
         ARGILE_ENERGIE_OPTS[energie].id,
-        note
+        note,
+        sleep,
+        symptoms,
+        menstruation
       )} style={{
         width: '100%', marginTop: 20, padding: '16px 20px', border: 'none', borderRadius: 100,
         background: ARGILE.ink, color: ARGILE.paper, fontFamily: 'Instrument Serif, serif',
@@ -510,14 +1207,22 @@ function ArgileJournalSaisie({ onNext }) {
       }}>
         Continuer — les traitements →
       </button>
-    </div>
+      </div>
+
+      {showCalendar && <ArgileStreakCalendarModal onClose={() => setShowCalendar(false)} />}
+      {showBadges   && <ArgileBadgesModal         onClose={() => setShowBadges(false)} />}
+    </>
   );
 }
 
 // ───── Journal · étape 2 — Traitements ─────
 function ArgileJournalTraitements({ onSave }) {
   const [meds, setMeds] = useStateA(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false));
-  const [checkedMeds, setCheckedMeds] = useStateA(() => LS.getJSON('bt_meds', []).filter(m => m.active !== false).map(m => m.id));
+  const [checkedMeds, setCheckedMeds] = useStateA(() => {
+    const todayEntry = LS.getJSON('bt_entries', []).find(e => e.date === new Date().toISOString().slice(0, 10));
+    if (todayEntry?.meds) return todayEntry.meds;
+    return LS.getJSON('bt_meds', []).filter(m => m.active !== false).map(m => m.id);
+  });
   const [showConfirm, setShowConfirm] = useStateA(false);
   const [showAddMed, setShowAddMed] = useStateA(false);
   const [medForm, setMedForm] = useStateA({ name: '', dose: '', qty: '', freq: '1x/jour', notes: '', start: new Date().toISOString().slice(0, 10) });
@@ -811,8 +1516,9 @@ function ArgileDone() {
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const dateLabel = cap(now.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long' }));
   const timeLabel = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
-  const entries = LS.getJSON('bt_entries', []);
-  const streak = computeStreak(entries);
+  const entries    = LS.getJSON('bt_entries', []);
+  const jokerDate  = LS.get('bt_joker_used_date', '') || null;
+  const { current: streak } = computeStreakFull(entries, jokerDate);
   const streakMsg = streak >= 2
     ? `${streak} jours d'affilée. Ta courbe se dessine.`
     : streak === 1
@@ -824,8 +1530,9 @@ function ArgileDone() {
 
   return (
     <div style={{
-      width: '100%', height: '100%', background: `radial-gradient(ellipse at 50% 30%, ${ARGILE.cream} 0%, ${ARGILE.sand} 70%)`,
-      position: 'relative', overflow: 'hidden',
+      position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
+      background: `radial-gradient(ellipse at 50% 30%, ${ARGILE.cream} 0%, ${ARGILE.sand} 70%)`,
+      overflow: 'hidden',
     }}>
       <style>{`
         @keyframes argile-sun-core { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
@@ -1005,6 +1712,8 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   // Brouillon du journal : accumulé à travers les 3 étapes
   const [journalDraft, setJournalDraft] = useStateA({ humeur: null, pensees: null });
   const [restoreData, setRestoreData] = useStateA(null);
+  const [pendingMilestone, setPendingMilestone] = useStateA(null);
+  const [pendingBadges, setPendingBadges] = useStateA([]);
 
   // Onboarding : popup si aucune donnée au premier lancement
   const hasNoData = LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0;
@@ -1012,6 +1721,59 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     () => LS.getJSON('bt_entries', []).length === 0 && LS.getJSON('bt_meds', []).length === 0
   );
   const [showTutorial, setShowTutorial] = useStateA(false);
+
+  // Réinitialisation mensuelle du joker + vérification des paliers et badges au démarrage
+  useEffectA(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    if (LS.get('bt_joker_month', '') !== currentMonth) {
+      LS.set('bt_joker_remaining', '1');
+      LS.set('bt_joker_month', currentMonth);
+    }
+    checkStreakMilestone();
+    // Récupérer les badges non célébrés (ex. saisis hors ligne)
+    const uncelebrated = LS.getJSON('bt_badges', [])
+      .filter(b => !b.celebrated)
+      .map(b => b.badgeId);
+    if (uncelebrated.length > 0) setPendingBadges(uncelebrated);
+  }, []);
+
+  // Vérifie si un nouveau palier de streak a été atteint
+  const checkStreakMilestone = () => {
+    const entries   = LS.getJSON('bt_entries', []);
+    const jokerDate = LS.get('bt_joker_used_date', '') || null;
+    const { current } = computeStreakFull(entries, jokerDate);
+    const reached = LS.getJSON('bt_milestones_reached', []);
+    const newMilestone = checkNewMilestone(current, reached);
+    if (newMilestone != null) {
+      LS.setJSON('bt_milestones_reached', [...reached, newMilestone]);
+      setPendingMilestone(newMilestone);
+    }
+  };
+
+  // Vérifie et attribue les nouveaux badges
+  const checkBadgesUnlocked = () => {
+    const entries    = LS.getJSON('bt_entries', []);
+    const jokerDate  = LS.get('bt_joker_used_date', '') || null;
+    const { best }   = computeStreakFull(entries, jokerDate);
+    const existing   = LS.getJSON('bt_badges', []);
+    const unlockedIds = existing.map(b => b.badgeId);
+    const newIds     = checkNewBadges(entries, best, unlockedIds);
+    if (newIds.length === 0) return;
+    const now = new Date().toISOString();
+    const updated = [
+      ...existing,
+      ...newIds.map(id => ({ badgeId: id, unlockedAt: now, celebrated: false })),
+    ];
+    LS.setJSON('bt_badges', updated);
+    setPendingBadges(prev => [...prev, ...newIds.filter(id => !prev.includes(id))]);
+  };
+
+  const dismissBadgeCelebration = () => {
+    const [first, ...rest] = pendingBadges;
+    const badges = LS.getJSON('bt_badges', []);
+    LS.setJSON('bt_badges', badges.map(b => b.badgeId === first ? { ...b, celebrated: true } : b));
+    setPendingBadges(rest);
+  };
 
   // Écouter les demandes de restauration (conflit de données Drive détecté)
   useEffectA(() => {
@@ -1022,24 +1784,29 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     return () => window.removeEventListener('bipoltrack:restore-required', handleRestoreReq);
   }, []);
 
+  useEffectA(() => {
+    window.__argileSetScreen = setScreen;
+    return () => { window.__argileSetScreen = null; };
+  }, [setScreen]);
+
   // Apply tweaks override to palette/density (mutates window.ARGILE_LIVE for screens to read)
   const pal = tweaks.palette || 'argile';
   const dens = tweaks.density || 'aere';
   const finish = tweaks.finish || 'lisse';
 
   // Sauvegarde de l'entrée dans bt_entries (même clé que la version legacy)
-  const saveEntry = ({ humeur, pensees, energie, meds, note }) => {
+  const saveEntry = ({ humeur, pensees, energie, meds, note, sleep, symptoms, menstruation }) => {
     const moodVal = (ARGILE_HUMEUR_OPTS.find(o => o.id === humeur) || ARGILE_HUMEUR_OPTS[1]).moodVal;
     const today = new Date().toISOString().slice(0, 10);
     const entry = {
       date: today,
       humeur, pensees, energie,
-      mood: moodVal,   // rétrocompat graphiques/calendrier
-      sleep: null, anxiety: null, symptoms: [],
+      mood: moodVal,
+      sleep: sleep ?? null, anxiety: null, symptoms: symptoms || [],
       meds,
       note,
       effects: [],
-      menstruation: [],
+      menstruation: menstruation || [],
       ts: Date.now(),
     };
     const entries = LS.getJSON('bt_entries', []);
@@ -1055,10 +1822,13 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     // Signaler la modification pour la synchronisation asynchrone Google Drive
     window.dispatchEvent(new CustomEvent('bipoltrack:datachanged'));
     window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+
+    // Vérifier paliers de streak et badges après la saisie
+    setTimeout(() => { checkStreakMilestone(); checkBadgesUnlocked(); }, 50);
   };
 
   let body;
-  if (screen === 'journal')        body = <ArgileJournalSaisie onNext={(h, p, e, note) => { setJournalDraft({ humeur: h, pensees: p, energie: e, note }); setScreen('traitements'); }} />;
+  if (screen === 'journal')        body = <ArgileJournalSaisie onNext={(h, p, e, note, sleep, symptoms, menstruation) => { setJournalDraft({ humeur: h, pensees: p, energie: e, note, sleep, symptoms, menstruation }); setScreen('traitements'); }} onMilestone={checkStreakMilestone} />;
   else if (screen === 'traitements') body = <ArgileJournalTraitements onSave={(meds) => { saveEntry({ ...journalDraft, meds }); setScreen('done'); }} />;
   else if (screen === 'done')    body = <ArgileDone />;
   else if (screen === 'stats')   body = <ArgileStats />;
@@ -1069,12 +1839,13 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
   else if (screen === 'report'  && window.ArgileReport)  body = <ArgileReport />;
   else if (screen === 'settings' && window.ArgileSettings) body = <ArgileSettings />;
   else if (screen === 'stats-deep' && window.ArgileStatsDeep) body = <ArgileStatsDeep />;
+  else if (screen === 'cycle'      && window.ArgileCycle)     body = <ArgileCycle />;
   else body = <ArgileJournalMood orbFinish={finish} />;
 
   // Group journal sub-screens under "journal" tab; report/history/settings under their nearest tab
   let active;
   if (['done','journal','traitements','empty'].includes(screen)) active = 'journal';
-  else if (screen === 'history' || screen === 'stats' || screen === 'stats-deep') active = 'stats';
+  else if (screen === 'history' || screen === 'stats' || screen === 'stats-deep' || screen === 'cycle') active = 'stats';
   else if (screen === 'meds' || screen === 'report') active = 'meds';
   else if (screen === 'news') active = 'news';
   else if (screen === 'settings') active = 'settings';
@@ -1193,6 +1964,22 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
           onImport={() => window.location.reload()}
         />
       )}
+
+      {/* Célébration de palier — dismissible en un tap */}
+      {pendingMilestone != null && (
+        <ArgileMilestoneCelebration
+          milestone={pendingMilestone}
+          onDismiss={() => setPendingMilestone(null)}
+        />
+      )}
+
+      {/* Célébration de badge — s'affiche après le palier de streak */}
+      {pendingMilestone == null && pendingBadges.length > 0 && (() => {
+        const badge = BADGE_CATALOG.find(b => b.id === pendingBadges[0]);
+        return badge ? (
+          <ArgileBadgeCelebration badge={badge} onDismiss={dismissBadgeCelebration} />
+        ) : null;
+      })()}
     </div>
   );
 }
