@@ -127,6 +127,7 @@ async function driveAutoSync() {
       entries:       LS.getJSON('bt_entries', []),
       meds:          LS.getJSON('bt_meds',    []),
       rssFeeds:      newsGetStoredFeeds(),
+      phaseAlgo:     LS.get('bt_phase_algo'),
       patientName:   LS.get('bt_patient_name'),
       patientDob:    LS.get('bt_patient_dob'),
       patientDoctor: LS.get('bt_patient_doctor'),
@@ -619,13 +620,6 @@ function ArgileStatsDeep() {
     window.dispatchEvent(new CustomEvent('bipoltrack:phaseAlgoChanged'));
   };
 
-  const { useEffect: useEffectStats } = React;
-  useEffectStats(() => {
-    const handler = () => setPhaseAlgoRefresh(k => k + 1);
-    window.addEventListener('bipoltrack:phaseAlgoChanged', handler);
-    return () => window.removeEventListener('bipoltrack:phaseAlgoChanged', handler);
-  }, []);
-
   // ── Données réelles depuis bt_entries ────────────────────────────
   const allEntries = useMemoAx(() =>
     LS.getJSON('bt_entries', [])
@@ -696,11 +690,8 @@ function ArgileStatsDeep() {
 
   // Simulation des phases
   const { map: projMap, fromDate: projFromDate, phase: projPhase, cycleDays: projCycleDays } = useMemoAx(
-    () => {
-      const algo = LS.get('bt_phase_algo') || '21j';
-      return computePhaseProjectionsArgile(allEntries, algo);
-    },
-    [allEntries, phaseAlgoRefresh]
+    () => computePhaseProjectionsArgile(allEntries, phaseAlgo),
+    [allEntries, phaseAlgo]
   );
 
   // Distribution heures de sommeil
@@ -1267,44 +1258,47 @@ function ArgileMeds() {
               <div key={m.id || i} style={{
                 background: ARGILE.paper, borderRadius: 16, padding: '18px 20px',
                 border: `1px solid ${ARGILE.border}`, position: 'relative', overflow: 'hidden',
+                display: 'flex', alignItems: 'flex-start', gap: 12,
               }}>
                 <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: color }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                    <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, color: ARGILE.ink, fontWeight: 400, lineHeight: 1 }}>{m.name}</div>
-                    {detail && (
-                      <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 15, color: ARGILE.ink2, marginTop: 4 }}>
-                        {detail}
-                      </div>
-                    )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                      <div style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, color: ARGILE.ink, fontWeight: 400, lineHeight: 1 }}>{m.name}</div>
+                      {detail && (
+                        <div style={{ fontFamily: 'Instrument Serif, serif', fontStyle: 'italic', fontSize: 15, color: ARGILE.ink2, marginTop: 4 }}>
+                          {detail}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {(startLabel || m.qty) && (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${ARGILE.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {startLabel && (
+                        <div>
+                          <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Depuis</div>
+                          <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{startLabel}</div>
+                        </div>
+                      )}
+                      {m.qty && (
+                        <div>
+                          <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Quantité</div>
+                          <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{m.qty}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {m.notes && (
+                    <p style={{ fontSize: 12, color: ARGILE.ink2, margin: '10px 0 0', lineHeight: 1.45, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
+                      « {m.notes} »
+                    </p>
+                  )}
                 </div>
-                {(startLabel || m.qty) && (
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${ARGILE.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    {startLabel && (
-                      <div>
-                        <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Depuis</div>
-                        <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{startLabel}</div>
-                      </div>
-                    )}
-                    {m.qty && (
-                      <div>
-                        <div style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Quantité</div>
-                        <div style={{ fontSize: 13, color: ARGILE.ink, marginTop: 2 }}>{m.qty}</div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {m.notes && (
-                  <p style={{ fontSize: 12, color: ARGILE.ink2, margin: '10px 0 0', lineHeight: 1.45, fontStyle: 'italic', fontFamily: 'Instrument Serif, serif' }}>
-                    « {m.notes} »
-                  </p>
-                )}
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${ARGILE.border}`, display: 'flex', gap: 10 }}>
-                  <button onClick={() => openEdit(m)} style={{ flex: 1, padding: '9px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 10, background: 'transparent', color: ARGILE.ink2, fontSize: 13, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                  <button onClick={() => openEdit(m)} aria-label="Modifier le traitement" style={{ padding: '3px 12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 8, background: 'transparent', color: ARGILE.ink2, fontSize: 11, lineHeight: 1.1, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     Modifier
                   </button>
-                  <button onClick={() => setConfirmDelete(m)} style={{ flex: 1, padding: '9px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 10, background: 'transparent', color: '#8B5C5C', fontSize: 13, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em', cursor: 'pointer' }}>
+                  <button onClick={() => setConfirmDelete(m)} aria-label="Supprimer le traitement" style={{ padding: '3px 12px', border: `1.5px solid ${ARGILE.border}`, borderRadius: 8, background: 'transparent', color: '#8B5C5C', fontSize: 11, lineHeight: 1.1, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     Supprimer
                   </button>
                 </div>
@@ -1941,6 +1935,7 @@ function ArgileSettings() {
 
   const saveField = (key, val, setter) => { LS.set(key, val); setter(val); };
 
+
   const saveDriveId = (v) => {
     const cleaned = v.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
     saveField('bt_drive_client_id', cleaned, setDriveId);
@@ -2007,6 +2002,7 @@ function ArgileSettings() {
         entries:       LS.getJSON('bt_entries', []),
         meds:          LS.getJSON('bt_meds',    []),
         rssFeeds:      newsGetStoredFeeds(),
+        phaseAlgo:     LS.get('bt_phase_algo'),
         patientName:   LS.get('bt_patient_name'),
         patientDob:    LS.get('bt_patient_dob'),
         patientDoctor: LS.get('bt_patient_doctor'),
@@ -2061,12 +2057,14 @@ function ArgileSettings() {
       if (file.entries)       LS.setJSON('bt_entries', file.entries);
       if (file.meds)          LS.setJSON('bt_meds',    file.meds);
       if (Array.isArray(file.rssFeeds)) newsSaveFeeds(file.rssFeeds);
+      if (file.phaseAlgo)     LS.set('bt_phase_algo',     file.phaseAlgo);
       if (file.patientName)   LS.set('bt_patient_name',   file.patientName);
       if (file.patientDob)    LS.set('bt_patient_dob',    file.patientDob);
       if (file.patientDoctor) LS.set('bt_patient_doctor', file.patientDoctor);
 
       LS.set('bt_last_synced', String(Date.now()));
       window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+      window.dispatchEvent(new CustomEvent('bipoltrack:restored'));
       setSyncFeedback('synchronisé ✓');
     } catch (e) {
       setSyncFeedback('erreur : ' + e.message);
@@ -2112,25 +2110,11 @@ function ArgileSettings() {
           value={driveSecret ? '••••••••' : undefined}
           placeholder="Client Secret Google OAuth"
           onSave={saveDriveSecret} inputType="password" />
-        {driveId && (() => {
-          const clean = window.location.href.split('#')[0].split('?')[0];
-          const redirectUri = clean.substring(0, clean.lastIndexOf('/') + 1) + 'oauth.html';
-          const validFormat = driveId.trim().endsWith('.apps.googleusercontent.com');
-          const id = driveId.trim();
-          const idPreview = id.length > 30 ? id.slice(0, 16) + '…' + id.slice(-14) : id;
-          return (
-            <div style={{ padding: '10px 16px 12px', borderBottom: `1px solid ${ARGILE.border}`, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: ARGILE.muted, lineHeight: 1.7 }}>
-              {!validFormat && (
-                <div style={{ color: '#c0392b', marginBottom: 6 }}>
-                  ⚠ Le Client ID doit se terminer par .apps.googleusercontent.com
-                </div>
-              )}
-              <div><span style={{ opacity: 0.6 }}>Client ID :</span> <span style={{ color: ARGILE.ink2 }}>{idPreview}</span></div>
-              <div style={{ marginTop: 2 }}><span style={{ opacity: 0.6 }}>Client Secret :</span> <span style={{ color: driveSecret ? ARGILE.ink2 : '#c0392b' }}>{driveSecret ? '••••••••' : '⚠ manquant — requis pour l\'échange de token'}</span></div>
-              <div style={{ marginTop: 4 }}><span style={{ opacity: 0.6 }}>URI de redirection :</span> <span style={{ color: ARGILE.ink2, wordBreak: 'break-all' }}>{redirectUri}</span></div>
-            </div>
-          );
-        })()}
+        {driveId && !driveId.trim().endsWith('.apps.googleusercontent.com') && (
+          <div style={{ padding: '10px 16px 12px', borderBottom: `1px solid ${ARGILE.border}`, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#c0392b', lineHeight: 1.7 }}>
+            ⚠ Le Client ID doit se terminer par .apps.googleusercontent.com
+          </div>
+        )}
         {driveId && (
           <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
             value={backupFeedback || 'Envoie les données vers Drive'}
@@ -2478,6 +2462,7 @@ function ArgileWelcome({ onNewSession, onImport }) {
       if (file.entries)       LS.setJSON('bt_entries',     file.entries);
       if (file.meds)          LS.setJSON('bt_meds',        file.meds);
       if (Array.isArray(file.rssFeeds)) LS.setJSON('bt_rss_feeds', file.rssFeeds);
+      if (file.phaseAlgo)     LS.set('bt_phase_algo',      file.phaseAlgo);
       if (file.patientName)   LS.set('bt_patient_name',    file.patientName);
       if (file.patientDob)    LS.set('bt_patient_dob',     file.patientDob);
       if (file.patientDoctor) LS.set('bt_patient_doctor',  file.patientDoctor);
@@ -3282,6 +3267,63 @@ function ArgileCycle() {
     </div>
   );
 }
+// ── ArgileDrive : API utilisée par le modal de conflit dans v1-argile ──
+function _applyDriveFile(file) {
+  const f = migrateData(file);
+  if (f.entries)                    LS.setJSON('bt_entries',     f.entries);
+  if (f.meds)                       LS.setJSON('bt_meds',        f.meds);
+  if (Array.isArray(f.rssFeeds))    LS.setJSON('bt_rss_feeds',   f.rssFeeds);
+  if (f.phaseAlgo)                  LS.set('bt_phase_algo',      f.phaseAlgo);
+  if (f.patientName)                LS.set('bt_patient_name',    f.patientName);
+  if (f.patientDob)                 LS.set('bt_patient_dob',     f.patientDob);
+  if (f.patientDoctor)              LS.set('bt_patient_doctor',  f.patientDoctor);
+  LS.set('bt_last_synced', String(Date.now()));
+  window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+  window.dispatchEvent(new CustomEvent('bipoltrack:restored'));
+}
+
+window.ArgileDrive = {
+  doRestoreFromDrive(driveData) {
+    _applyDriveFile(driveData);
+  },
+  async keepLocalAndOverwrite() {
+    const clientId     = LS.get('bt_drive_client_id');
+    const clientSecret = LS.get('bt_drive_client_secret');
+    if (!clientId) return;
+    try {
+      const token = await googleOAuthToken(clientId, clientSecret);
+      const payload = JSON.stringify({
+        app: 'BipolTrack', schemaVersion: BT_SCHEMA_VERSION, exportedAt: new Date().toISOString(),
+        entries:       LS.getJSON('bt_entries', []),
+        meds:          LS.getJSON('bt_meds',    []),
+        rssFeeds:      newsGetStoredFeeds(),
+        phaseAlgo:     LS.get('bt_phase_algo'),
+        patientName:   LS.get('bt_patient_name'),
+        patientDob:    LS.get('bt_patient_dob'),
+        patientDoctor: LS.get('bt_patient_doctor'),
+      }, null, 2);
+      const filename = 'bipoltrack-backup.json';
+      const search   = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='${filename}'+and+trashed=false`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json());
+      const fileId = search.files?.[0]?.id;
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({ name: filename, mimeType: 'application/json' })], { type: 'application/json' }));
+      form.append('file',     new Blob([payload], { type: 'application/json' }));
+      await fetch(
+        fileId
+          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,
+        { method: fileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+      );
+      LS.set('bt_last_synced', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('bipoltrack:synced'));
+    } catch (e) {
+      console.warn('ArgileDrive.keepLocalAndOverwrite:', e);
+    }
+  },
+};
 
 Object.assign(window, {
   ArgileEmpty, ArgileNews, ArgileStatsDeep, ArgileMeds, ArgileReport, ArgileHistory, ArgileSettings,
