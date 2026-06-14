@@ -1789,6 +1789,13 @@ function ArgileApp({ initialScreen = 'journal', tweaks = {} }) {
     return () => { window.__argileSetScreen = null; };
   }, [setScreen]);
 
+  // Rechargement après restauration Drive pour rafraîchir streak, badges et préférences
+  useEffectA(() => {
+    const handleRestored = () => window.location.reload();
+    window.addEventListener('bipoltrack:restored', handleRestored);
+    return () => window.removeEventListener('bipoltrack:restored', handleRestored);
+  }, []);
+
   // Apply tweaks override to palette/density (mutates window.ARGILE_LIVE for screens to read)
   const pal = tweaks.palette || 'argile';
   const dens = tweaks.density || 'aere';
