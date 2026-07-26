@@ -2081,6 +2081,7 @@ function ArgileSettings() {
       })()
     : 'jamais synchronisé';
   const driveStatus = driveId ? `ID configuré · ${driveSyncLabel}` : 'Non configuré';
+  const isValidDriveId = driveId && driveId.trim().endsWith('.apps.googleusercontent.com');
 
   return (
     <div style={{ padding: '20px 24px 0', overflowY: 'auto', height: 'calc(100% - 20px)', paddingBottom: 80 }}>
@@ -2110,22 +2111,20 @@ function ArgileSettings() {
           value={driveSecret ? '••••••••' : undefined}
           placeholder="Client Secret Google OAuth"
           onSave={saveDriveSecret} inputType="password" />
-        {driveId && !driveId.trim().endsWith('.apps.googleusercontent.com') && (
+        {driveId && !isValidDriveId && (
           <div style={{ padding: '10px 16px 12px', borderBottom: `1px solid ${ARGILE.border}`, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#c0392b', lineHeight: 1.7 }}>
             ⚠ Le Client ID doit se terminer par .apps.googleusercontent.com
           </div>
         )}
-        {driveId && (
-          <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
-            value={backupFeedback || 'Envoie les données vers Drive'}
-            trailing={backupFeedback ? undefined : 'sauvegarder →'}
-            onTrailing={backupFeedback ? undefined : saveNow} />
-        )}
+        <ArgileSettingsRow icon="☁" title="Sauvegarder maintenant"
+          value={isValidDriveId && backupFeedback ? backupFeedback : (!isValidDriveId ? 'Configurer Client ID' : 'Envoie les données vers Drive')}
+          trailing={isValidDriveId && !backupFeedback ? 'sauvegarder →' : undefined}
+          onTrailing={isValidDriveId && !backupFeedback ? saveNow : undefined} />
         <ArgileSettingsRow icon="↻" title="Synchronisation auto"
           value={syncFeedback || (syncAuto ? 'Active' : 'Inactive')}
-          toggle toggleValue={syncAuto} onToggle={toggleSync}
-          trailing={driveId && !syncFeedback ? 'syncer →' : undefined}
-          onTrailing={driveId && !syncFeedback ? syncFromDrive : undefined} />
+          toggle toggleValue={syncAuto && isValidDriveId} onToggle={isValidDriveId ? toggleSync : undefined}
+          trailing={isValidDriveId && !syncFeedback ? 'syncer →' : undefined}
+          onTrailing={isValidDriveId && !syncFeedback ? syncFromDrive : undefined} />
         <ArgileSettingsRow icon="⤓" title="Exporter en JSON" value="Sauvegarde complète"
           trailing={exportFeedback === 'json' ? 'exporté ✓' : 'exporter →'}
           onTrailing={exportJSON} />
